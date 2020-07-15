@@ -1,10 +1,12 @@
 #!/usr/bin/env python
 
 import sys
+from pathlib import Path
 
-from iseq.profmark import download_genbank
+from iseq.profmark import genbank
 
 accession = sys.argv[1]
 rettype = sys.argv[2]
+output = Path(sys.argv[3])
 
-download_genbank(accession, rettype)
+genbank.download(accession, rettype, output)

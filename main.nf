@@ -1,81 +1,107 @@
 #!/usr/bin/env nextflow
 
 params.accfile = "$baseDir/accessions.txt"
-// params.datadir = "$baseDir/data"
+params.hmmfile = "/Users/horta/code/iseq-profmark/Pfam-A_small.hmm"
 params.scriptdir = "$baseDir/script"
 
-accessions = Channel.from(file(params.accfile).readLines())
-// datadir = file(params.datadir)
+Channel
+    .fromList(file(params.accfile).readLines())
+    .into { acc_ch1; acc_ch2 }
+
 scriptdir = file(params.scriptdir)
 
-//datadir.mkdirs()
-//datadir.isDirectory
-
-//accessions = Channel
-//  .fromPath(params.accfile)
-//  .readLines()
-//  .each { println it.trim() }
-
-// acc_ch = Channel.fromPath(params.accfile)
-// .splitFasta(by: params.chunkSize, file:true)
-//    .set { fasta_ch }
-//
-//    myFile.eachLine {  str ->
-//        println "line ${count++}: $str"
-//    }
-
-//process myProc {
-//    input:
-//    file acc from acc_ch
-//
-//    output:
-//    stdout result
-//
-//    """
-//    echo $acc
-//    """
-//}
-
-// process myTask {
-//
-//     input:
-//     val str from 'Hello', 'Hola', 'Bonjour'
-//
-//     shell:
-//     '''
-//     echo User $USER says !{str}
-//     '''
-//
-// }
-
-//Channel
-//    .fromList( ['a', 'b', 'c', 'd'] )
-//    .view { "value: $it" }
-
-process download_genbank {
+process download_hmmfile {
     input:
-    val acc from accessions
+    path hmmfile from params.hmmfile
 
     output:
-    tuple path("${acc}.gb"), path("${acc}.fasta") into genbank_ch
+    path "db.hmm" into hmmfile_ch
 
+    script:
     """
-    $scriptdir/download_genbank.py $acc gb
-    $scriptdir/download_genbank.py $acc fasta
+    cp $hmmfile db.hmm
     """
 }
 
-process checksum {
+process press_hmmfile {
     input:
-    tuple path(gb), path(fasta) from genbank_ch
+    path hmmfile from hmmfile_ch
 
     output:
-    stdout result
+    path "db.*", includeInputs: true into hmmdb_ch1, hmmdb_ch2
 
+    script:
     """
-    sha256sum $gb
-    sha256sum $fasta
+    hmmpress $hmmfile
     """
 }
 
-result.view { "$it" }
+process download_genbank_gb {
+    input:
+    val acc from acc_ch1
+
+    output:
+    tuple val("$acc"), path("${acc}.gb") into genbank_gb_ch
+
+    script:
+    """
+    $scriptdir/download_genbank.py $acc gb ${acc}.gb
+    """
+}
+
+process download_genbank_fasta {
+    input:
+    val acc from acc_ch2
+
+    output:
+    tuple val("$acc"), path("${acc}.fasta") into genbank_fasta_ch
+
+    script:
+    """
+    $scriptdir/download_genbank.py $acc fasta ${acc}.fasta
+    """
+}
+
+process extract_cds {
+    input:
+    tuple acc, path(gb) from genbank_gb_ch
+
+    output:
+    path "${acc}_cds_amino.fasta" into cds_amino_ch
+    path "${acc}_cds_nucl.fasta" into cds_nucl_ch
+
+    script:
+    """
+    $scriptdir/extract_cds.py $gb ${acc}_cds_amino.fasta ${acc}_cds_nucl.fasta
+    """
+}
+
+process hmmscan {
+    input:
+    path hmmdb from hmmdb_ch1
+    path amino from cds_amino_ch
+
+    output:
+    path "${acc}_domtblout.txt" into hmmscan_output_ch
+
+    script:
+    acc = amino.name.toString().tokenize('_').get(0)
+    """
+    hmmscan --cut_ga --domtblout ${acc}_domtblout.txt db.hmm $amino
+    """
+}
+
+process iseq_scan {
+    input:
+    path hmmdb from hmmdb_ch2
+    path nucl from cds_nucl_ch
+
+    output:
+    path "${acc}_output.gff" into iseq_output_ch
+
+    script:
+    acc = nucl.name.toString().tokenize('_').get(0)
+    """
+    iseq pscan2 db.hmm $nucl --output ${acc}_output.gff
+    """
+}
