@@ -15,7 +15,7 @@ process download_hmmfile {
     path hmmfile from params.hmmfile
 
     output:
-    path "db.hmm" into hmmfile_ch
+    path "db.hmm" into hmmfile_ch1, hmmfile_ch2
 
     script:
     """
@@ -25,7 +25,7 @@ process download_hmmfile {
 
 process press_hmmfile {
     input:
-    path hmmfile from hmmfile_ch
+    path hmmfile from hmmfile_ch1
 
     output:
     path "db.*", includeInputs: true into hmmdb_ch1, hmmdb_ch2
@@ -68,7 +68,7 @@ process extract_cds {
 
     output:
     path "${acc}_cds_amino.fasta" into cds_amino_ch
-    path "${acc}_cds_nucl.fasta" into cds_nucl_ch
+    path "${acc}_cds_nucl.fasta" into cds_nucl_ch1, cds_nucl_ch2
 
     script:
     """
@@ -94,7 +94,7 @@ process hmmscan {
 process iseq_scan {
     input:
     path hmmdb from hmmdb_ch2
-    path nucl from cds_nucl_ch
+    path nucl from cds_nucl_ch1
 
     output:
     path "${acc}_output.gff" into iseq_output_ch
@@ -103,5 +103,24 @@ process iseq_scan {
     acc = nucl.name.toString().tokenize('_').get(0)
     """
     iseq pscan2 db.hmm $nucl --output ${acc}_output.gff
+    """
+}
+
+process profmark {
+    publishDir '/Users/horta/code/iseq-profmark/result'
+
+    input:
+    path hmmfile from hmmfile_ch2
+    path nuclfile from cds_nucl_ch2
+    path domtblout_file from hmmscan_output_ch
+    path iseqout_file from iseq_output_ch
+
+    output:
+    path "*_profmark.pkl" into result
+
+    script:
+    acc = nuclfile.name.toString().tokenize('_').get(0)
+    """
+    $scriptdir/evaluate.py $hmmfile $nuclfile $domtblout_file $iseqout_file ${acc}_profmark.pkl
     """
 }
