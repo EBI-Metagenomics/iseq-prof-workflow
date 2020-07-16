@@ -1,8 +1,10 @@
 #!/usr/bin/env nextflow
 
+params.outdir = "/Users/horta/code/iseq-profmark/result"
 params.accfile = "$baseDir/accessions.txt"
 params.hmmfile = "/Users/horta/code/iseq-profmark/Pfam-A_small.hmm"
 params.scriptdir = "$baseDir/script"
+params.chunkSize = 4
 
 Channel
     .fromList(file(params.accfile).readLines())
@@ -37,90 +39,147 @@ process press_hmmfile {
 }
 
 process download_genbank_gb {
+    publishDir params.outdir, mode:"copy", saveAs: { name -> "${acc}/$name" }
+
     input:
     val acc from acc_ch1
 
     output:
-    tuple val("$acc"), path("${acc}.gb") into genbank_gb_ch
+    tuple val(acc), path("genbank.gb") into genbank_gb_ch
 
     script:
     """
-    $scriptdir/download_genbank.py $acc gb ${acc}.gb
+    $scriptdir/download_genbank.py $acc gb genbank.gb
     """
 }
 
 process download_genbank_fasta {
+    publishDir params.outdir, mode:"copy", saveAs: { name -> "${acc}/$name" }
+
     input:
     val acc from acc_ch2
 
     output:
-    tuple val("$acc"), path("${acc}.fasta") into genbank_fasta_ch
+    tuple val(acc), path("genbank.fasta") into genbank_fasta_ch
 
     script:
     """
-    $scriptdir/download_genbank.py $acc fasta ${acc}.fasta
+    $scriptdir/download_genbank.py $acc fasta genbank.fasta
     """
 }
 
 process extract_cds {
+    publishDir params.outdir, mode:"copy", saveAs: { name -> "${acc}/$name" }
+
     input:
-    tuple acc, path(gb) from genbank_gb_ch
+    tuple val(acc), path(gb) from genbank_gb_ch
 
     output:
-    path "${acc}_cds_amino.fasta" into cds_amino_ch
-    path "${acc}_cds_nucl.fasta" into cds_nucl_ch1, cds_nucl_ch2
+    tuple val(acc), path("cds_amino.fasta") into cds_amino_ch
+    tuple val(acc), path("cds_nucl.fasta") into cds_nucl_ch1, cds_nucl_ch2
 
     script:
     """
-    $scriptdir/extract_cds.py $gb ${acc}_cds_amino.fasta ${acc}_cds_nucl.fasta
+    $scriptdir/extract_cds.py $gb cds_amino.fasta cds_nucl.fasta
     """
 }
 
 process hmmscan {
+    publishDir params.outdir, mode:"copy", saveAs: { name -> "${acc}/$name" }
+
     input:
     path hmmdb from hmmdb_ch1
-    path amino from cds_amino_ch
+    tuple val(acc), path(amino) from cds_amino_ch
 
     output:
-    path "${acc}_domtblout.txt" into hmmscan_output_ch
+    tuple val(acc), path("domtblout.txt") into hmmscan_output_ch
 
     script:
-    acc = amino.name.toString().tokenize('_').get(0)
     """
-    hmmscan --cut_ga --domtblout ${acc}_domtblout.txt db.hmm $amino
+    hmmscan --cut_ga --domtblout domtblout.txt db.hmm $amino
     """
 }
+
+cds_nucl_ch1
+    .splitFasta(by: params.chunkSize, file:true, elem:1)
+    .set { cds_nucl_split_ch }
 
 process iseq_scan {
     input:
     path hmmdb from hmmdb_ch2
-    path nucl from cds_nucl_ch1
+    tuple val(acc), path(nucl) from cds_nucl_split_ch
 
     output:
-    path "${acc}_output.gff" into iseq_output_ch
+    path "${acc}_output.gff" into iseq_output_split_ch
+    path "${acc}_oamino.fasta" into iseq_oamino_split_ch
+    path "${acc}_ocodon.fasta" into iseq_ocodon_split_ch
 
     script:
-    acc = nucl.name.toString().tokenize('_').get(0)
+    chunk = nucl.name.toString().tokenize('.')[-2]
     """
-    iseq pscan2 db.hmm $nucl --output ${acc}_output.gff
+    out=""
+    iseq pscan2 db.hmm $nucl --hit-prefix chunk_${chunk}_item\
+        --output ${acc}_output.gff --oamino ${acc}_oamino.fasta\
+        --ocodon ${acc}_ocodon.fasta --quiet
     """
 }
 
+iseq_output_split_ch
+   .collectFile(keepHeader:true, skip:1)
+   .map { [it.name.toString().tokenize('_')[0], it] }
+   .set { iseq_output_ch1 }
+
+iseq_oamino_split_ch
+   .collectFile()
+   .map { [it.name.toString().tokenize('_')[0], it] }
+   .set { iseq_oamino_ch }
+
+iseq_ocodon_split_ch
+   .collectFile()
+   .map { [it.name.toString().tokenize('_')[0], it] }
+   .set { iseq_ocodon_ch }
+
+iseq_output_ch1
+   .join(iseq_oamino_ch)
+   .join(iseq_ocodon_ch)
+   .set { iseq_results_ch }
+
+process save_iseq_results {
+    publishDir params.outdir, mode:"copy", saveAs: { name -> "${acc}/$name" }
+
+    input:
+    tuple val(acc), path(output), path(oamino), path(ocodon) from iseq_results_ch
+
+    output:
+    tuple val(acc), path("output.gff") into iseq_output_ch2
+    path("oamino.fasta")
+    path("ocodon.fasta")
+
+    script:
+    """
+    mv $output output.gff
+    mv $oamino oamino.fasta
+    mv $ocodon ocodon.fasta
+    """
+}
+
+cds_nucl_ch2
+   .join(hmmscan_output_ch)
+   .join(iseq_output_ch2)
+   .set { results_ch }
+
 process profmark {
-    publishDir '/Users/horta/code/iseq-profmark/result'
+    publishDir params.outdir, mode:"copy", saveAs: { name -> "${acc}/$name" }
 
     input:
     path hmmfile from hmmfile_ch2
-    path nuclfile from cds_nucl_ch2
-    path domtblout_file from hmmscan_output_ch
-    path iseqout_file from iseq_output_ch
+    tuple val(acc), path(nuclfile), path("domtblout.txt"), path("output.gff") from results_ch
 
     output:
-    path "*_profmark.pkl" into result
+    path("profmark.pkl")
 
     script:
-    acc = nuclfile.name.toString().tokenize('_').get(0)
     """
-    $scriptdir/evaluate.py $hmmfile $nuclfile $domtblout_file $iseqout_file ${acc}_profmark.pkl
+    $scriptdir/evaluate.py $hmmfile $nuclfile domtblout.txt output.gff profmark.pkl
     """
 }
