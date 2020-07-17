@@ -4,7 +4,7 @@ params.outdir = "/Users/horta/code/iseq-profmark/result"
 params.accfile = "$baseDir/accessions.txt"
 params.hmmfile = "https://iseq-py.s3.eu-west-2.amazonaws.com/Pfam-A_24.hmm"
 params.scriptdir = "$baseDir/script"
-params.chunkSize = 4
+params.chunkSize = 100
 
 process save_params {
     publishDir params.outdir, mode:"copy"
