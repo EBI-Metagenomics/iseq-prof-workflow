@@ -26,6 +26,16 @@ Channel
 scriptdir = file(params.scriptdir)
 hmmfile_ch = Channel.value(file(params.hmmfile))
 
+process copy_hmmfile {
+    publishDir params.outdir, mode:"copy"
+
+    input:
+    path hmmfile from hmmfile_ch
+
+    output:
+    path "*.hmm", includeInputs: true
+}
+
 process press_hmmfile {
     input:
     path hmmfile from hmmfile_ch
