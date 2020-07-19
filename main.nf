@@ -19,6 +19,45 @@ process save_params {
     """
 }
 
+process download_genbank_catalog
+{
+    memory '12 GB'
+
+    output:
+    path "gb238.catalog.all.tsv" into gb_catalog_ch1
+
+    script:
+    """
+    echo "" > gb238.catalog.all.tsv
+
+    for db in est gss other;
+    do
+       echo $db
+       curl -s ftp://ftp.ncbi.nlm.nih.gov/genbank/catalog/gb238.catalog.${db}.txt.gz \
+           | gunzip -c  \
+           | sed 's/\t[^\t]*\t[^\t]*\t[^\t]*$//' - \
+           | grep --invert-match -P "\tNoTaxID" - \
+           >> gb238.catalog.all.tsv
+    done
+    """
+}
+
+process unique_genbank_organisms
+{
+    memory '40 GB'
+
+    input:
+    path "gb238.catalog.all.tsv" from gb_catalog_ch1
+
+    output:
+    path "gb238.catalog.unique.feather" into gb_catalog_ch2
+
+    script:
+    """
+    $basedir/unique_genbank_catalog.py unique_genbank_catalog.py gb238.catalog.unique.feather
+    """
+}
+
 Channel
     .fromList(file(params.accfile).readLines())
     .into { acc_ch1; acc_ch2 }
@@ -34,6 +73,10 @@ process copy_hmmfile {
 
     output:
     path "*.hmm", includeInputs: true
+
+    script:
+    """
+    """
 }
 
 process press_hmmfile {
