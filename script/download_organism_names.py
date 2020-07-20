@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 import random
 from ftplib import FTP, error_perm
 from typing import List

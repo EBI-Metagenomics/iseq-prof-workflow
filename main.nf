@@ -6,6 +6,9 @@ params.hmmfile = "https://iseq-py.s3.eu-west-2.amazonaws.com/Pfam-A_24.hmm"
 params.scriptdir = "$baseDir/script"
 params.chunkSize = 100
 
+scriptdir = file(params.scriptdir)
+hmmfile_ch = Channel.value(file(params.hmmfile))
+
 process save_params {
     publishDir params.outdir, mode:"copy"
 
@@ -19,21 +22,22 @@ process save_params {
     """
 }
 
-process download_organism_names
-{
+process download_organism_names {
+   cache "lenient"
+
    output:
    tuple path("archaea.txt"), path("bacteria.txt") into organisms_ch
 
    script:
    """
-   $basedir/download_organism_names.py
+   $scriptdir/download_organism_names.py
    file archaea.txt
    file bacteria.txt
    """
 }
 
-process download_genbank_catalog
-{
+process download_genbank_catalog {
+    cache "lenient"
     memory "12 GB"
 
     output:
@@ -41,49 +45,42 @@ process download_genbank_catalog
 
     script:
     """
-    new_header="Version\tMolType\tBasePairs\tOrganism\tTaxID"
-    old_header="Accession\tVersion\tID\tMolType\tBasePairs\tOrganism\tTaxID\tDB\tBioProject\tBioSample"
-
-    echo -e $new_header > gb238.catalog.all.tsv
-
-    for db in est gss other;
-    do
-       echo $db
-       curl -s ftp://ftp.ncbi.nlm.nih.gov/genbank/catalog/gb238.catalog.${db}.txt.gz \
-          | gunzip -c  \
-          | cut -d$'\t' -f2,4,5,6,7 \
-          | grep --invert-match $'\tmRNA\t' \
-          | grep --invert-match $'\trRNA\t' \
-          | grep --invert-match $'\ttRNA\t' \
-          | grep --invert-match $'\tncRNA\t' \
-          | grep --invert-match $'\tNoTaxID' \
-          >> gb238.catalog.all.tsv
-    done
+    $scriptdir/download_genbank_catalog.sh
     """
 }
 
-process unique_genbank_organisms
-{
+process unique_genbank_organisms {
+    cache "deep"
     memory "60 GB"
 
     input:
     path "gb238.catalog.all.tsv" from gb_catalog_ch1
 
     output:
-    path "gb238.catalog.unique.feather" into gb_catalog_ch2
+    path "gb238.catalog.tsv" into gb_catalog_ch2
 
     script:
     """
-    $basedir/unique_genbank_catalog.py gb238.catalog.unique.feather gb238.catalog.unique.feather
+    $scriptdir/unique_genbank_catalog.py gb238.catalog.all.tsv gb238.catalog.tsv
+    """
+}
+
+process create_accessions_file {
+    input:
+    path "gb238.catalog.tsv" from gb_catalog_ch2
+    tuple path("archaea.txt"), path("bacteria.txt") from organisms_ch
+
+    script:
+    """
+    file gb238.catalog.tsv
+    file archaea.txt
+    file bacteria.txt
     """
 }
 
 Channel
     .fromList(file(params.accfile).readLines())
     .into { acc_ch1; acc_ch2 }
-
-scriptdir = file(params.scriptdir)
-hmmfile_ch = Channel.value(file(params.hmmfile))
 
 process copy_hmmfile {
     publishDir params.outdir, mode:"copy"
@@ -114,6 +111,7 @@ process press_hmmfile {
 
 process download_genbank_gb {
     publishDir params.outdir, mode:"copy", saveAs: { name -> "${acc}/$name" }
+    cache "lenient"
 
     input:
     val acc from acc_ch1
@@ -129,6 +127,7 @@ process download_genbank_gb {
 
 process download_genbank_fasta {
     publishDir params.outdir, mode:"copy", saveAs: { name -> "${acc}/$name" }
+    cache "lenient"
 
     input:
     val acc from acc_ch2
