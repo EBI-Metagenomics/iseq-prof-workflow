@@ -41,7 +41,7 @@ process download_genbank_catalog
 
     script:
     """
-    new_header="Accession\tVersion\tMolType\tBasePairs\tOrganism\tTaxID"
+    new_header="Version\tMolType\tBasePairs\tOrganism\tTaxID"
     old_header="Accession\tVersion\tID\tMolType\tBasePairs\tOrganism\tTaxID\tDB\tBioProject\tBioSample"
 
     echo -e $new_header > gb238.catalog.all.tsv
@@ -51,9 +51,12 @@ process download_genbank_catalog
        echo $db
        curl -s ftp://ftp.ncbi.nlm.nih.gov/genbank/catalog/gb238.catalog.${db}.txt.gz \
           | gunzip -c  \
-          | grep --invert-match $'\tmRNA\t' - \
-          | grep --invert-match $'\tNoTaxID' - \
-          | cut -d$'\t' -f1,2,3,4,5,6 \
+          | cut -d$'\t' -f2,4,5,6,7 \
+          | grep --invert-match $'\tmRNA\t' \
+          | grep --invert-match $'\trRNA\t' \
+          | grep --invert-match $'\ttRNA\t' \
+          | grep --invert-match $'\tncRNA\t' \
+          | grep --invert-match $'\tNoTaxID' \
           >> gb238.catalog.all.tsv
     done
     """
