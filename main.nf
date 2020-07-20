@@ -19,6 +19,19 @@ process save_params {
     """
 }
 
+process download_organism_names
+{
+   output:
+   tuple path("archaea.txt"), path("bacteria.txt") into organisms_ch
+
+   script:
+   """
+   $basedir/download_organism_names.py
+   file archaea.txt
+   file bacteria.txt
+   """
+}
+
 process download_genbank_catalog
 {
     memory '12 GB'
