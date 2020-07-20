@@ -34,24 +34,26 @@ process download_organism_names
 
 process download_genbank_catalog
 {
-    memory '12 GB'
+    memory "12 GB"
 
     output:
     path "gb238.catalog.all.tsv" into gb_catalog_ch1
 
     script:
     """
-    printf "" > gb238.catalog.all.tsv
+    new_header="Accession\tVersion\tMolType\tBasePairs\tOrganism\tTaxID"
+    old_header="Accession\tVersion\tID\tMolType\tBasePairs\tOrganism\tTaxID\tDB\tBioProject\tBioSample"
+
+    echo -e $new_header > gb238.catalog.all.tsv
 
     for db in est gss other;
     do
        echo $db
        curl -s ftp://ftp.ncbi.nlm.nih.gov/genbank/catalog/gb238.catalog.${db}.txt.gz \
-           | gunzip -c  \
-           | sed 's/\t[^\t]*\t[^\t]*\t[^\t]*$//' - \
-           | sed 's/^\\([^\t]*\\)\t\\([^\t]*\\)\t[^\t]*\t\\(.*\\)$/\\1\t\\2\t\\3/' - \
-           | grep --invert-match -P "\tNoTaxID" - \
-           >> gb238.catalog.all.tsv
+          | gunzip -c  \
+          | grep --invert-match $'\tNoTaxID' - \
+          | cut -d$'\t' -f1,2,3,4,5,6 \
+          >> gb238.catalog.all.tsv
     done
     """
 }
