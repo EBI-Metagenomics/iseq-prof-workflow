@@ -51,6 +51,7 @@ process download_genbank_catalog
        echo $db
        curl -s ftp://ftp.ncbi.nlm.nih.gov/genbank/catalog/gb238.catalog.${db}.txt.gz \
           | gunzip -c  \
+          | grep --invert-match $'\tmRNA\t' - \
           | grep --invert-match $'\tNoTaxID' - \
           | cut -d$'\t' -f1,2,3,4,5,6 \
           >> gb238.catalog.all.tsv
