@@ -41,7 +41,7 @@ process download_genbank_catalog
 
     script:
     """
-    echo "" > gb238.catalog.all.tsv
+    printf "" > gb238.catalog.all.tsv
 
     for db in est gss other;
     do
@@ -49,6 +49,7 @@ process download_genbank_catalog
        curl -s ftp://ftp.ncbi.nlm.nih.gov/genbank/catalog/gb238.catalog.${db}.txt.gz \
            | gunzip -c  \
            | sed 's/\t[^\t]*\t[^\t]*\t[^\t]*$//' - \
+           | sed 's/^\\([^\t]*\\)\t\\([^\t]*\\)\t[^\t]*\t\\(.*\\)$/\\1\t\\2\t\\3/' - \
            | grep --invert-match -P "\tNoTaxID" - \
            >> gb238.catalog.all.tsv
     done
