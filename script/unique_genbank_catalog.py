@@ -1,6 +1,7 @@
 import sys
 from collections import OrderedDict
 
+import dask
 import dask.dataframe as dd
 
 dtype = OrderedDict()
@@ -17,6 +18,8 @@ dtype["TaxID"] = "int64"
 
 input_file = sys.argv[1]
 output_file = sys.argv[2]
+num_workers = int(sys.argv[3])
+dask.config.set(num_workers=num_workers)
 
 names = list(dtype.keys())
 df = dd.read_csv(input_file, sep="\t", header=0, dtype=dtype)
