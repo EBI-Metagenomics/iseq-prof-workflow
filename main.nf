@@ -44,7 +44,7 @@ process download_genbank_catalog
 
 process unique_genbank_organisms
 {
-    memory '40 GB'
+    memory "60 GB"
 
     input:
     path "gb238.catalog.all.tsv" from gb_catalog_ch1
@@ -54,7 +54,7 @@ process unique_genbank_organisms
 
     script:
     """
-    $basedir/unique_genbank_catalog.py unique_genbank_catalog.py gb238.catalog.unique.feather
+    $basedir/unique_genbank_catalog.py gb238.catalog.unique.feather gb238.catalog.unique.feather
     """
 }
 
