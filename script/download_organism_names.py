@@ -1,6 +1,6 @@
 import random
-from typing import List, Union, Set
 from ftplib import FTP, error_perm
+from typing import List
 
 
 def isdir(ftp, item):

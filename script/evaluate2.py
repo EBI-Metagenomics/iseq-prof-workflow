@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 
 import sys
-from pathlib import Path
 from glob import glob
+from pathlib import Path
 
 from iseq.profmark import ProfMark
 
