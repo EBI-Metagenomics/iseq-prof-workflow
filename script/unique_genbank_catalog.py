@@ -6,7 +6,7 @@ import pandas as pd
 dtype = OrderedDict()
 dtype["Accession"] = "str"
 dtype["Version"] = "str"
-dtype["ID"] = "int64"
+# dtype["ID"] = "int64"
 dtype["MolType"] = "category"
 dtype["BasePairs"] = "int64"
 dtype["Organism"] = "str"
@@ -19,7 +19,8 @@ input_file = sys.argv[1]
 output_file = sys.argv[2]
 
 names = list(dtype.keys())
-df = pd.read_csv(input_file, sep="\t", header=None, names=names, dtype=dtype)
+df = pd.read_csv(input_file, sep="\t", header=0, dtype=dtype)
+# df = pd.read_csv(input_file, sep="\t", header=None, names=names, dtype=dtype)
 
 max_bp = {key: row.BasePairs for key, row in df.groupby("Organism").max().iterrows()}
 df["longest"] = df.apply(lambda row: max_bp[row.Organism] == row.BasePairs, axis=1)
