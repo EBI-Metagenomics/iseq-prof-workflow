@@ -75,17 +75,18 @@ process sample_accessions {
     tuple path(domaintxt), val(nsamples) from domain_files_spec_ch
 
     output:
-    stdout into (acc_ch1, acc_ch2)
+    path "accessions" into acc_file_ch
 
     script:
     domain = domaintxt.name.toString().tokenize(".")[0]
     """
-    $scriptdir/sample_accessions.py gb238.catalog.tsv $domaintxt ${domain}.accessions $nsamples $seed >log.txt
-    cat ${domain}.accessions
+    $scriptdir/sample_accessions.py gb238.catalog.tsv $domaintxt accessions $nsamples $seed
     """
 }
 
-/* accessions_ch.subscribe { println it } */
+acc_file_ch
+   .splitText() { it.trim() }
+   .into { acc_ch1; acc_ch2 }
 
 process copy_hmmfile {
     publishDir params.outdir, mode:"copy"
