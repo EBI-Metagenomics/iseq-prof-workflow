@@ -1,6 +1,7 @@
 import sys
-import pandas as pd
 from collections import OrderedDict
+
+import pandas as pd
 
 dtype = OrderedDict()
 dtype["Accession"] = "str"
