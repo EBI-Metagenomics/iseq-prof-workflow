@@ -22,11 +22,11 @@ names = list(dtype.keys())
 df = pd.read_csv(input_file, sep="\t", header=None, names=names, dtype=dtype)
 
 max_bp = {key: row.BasePairs for key, row in df.groupby("Organism").max().iterrows()}
-df['longest'] = df.apply(lambda row: max_bp[row.Organism] == row.BasePairs, axis=1)
+df["longest"] = df.apply(lambda row: max_bp[row.Organism] == row.BasePairs, axis=1)
 df = df[df["longest"]].copy()
 
 max_id = {key: row.ID for key, row in df.groupby("Organism").max().iterrows()}
-df['latest'] = df.apply(lambda row: max_id[row.Organism] == row.ID, axis=1)
+df["latest"] = df.apply(lambda row: max_id[row.Organism] == row.ID, axis=1)
 df = df[df["latest"]].copy()
 
 df = df.reset_index(drop=True)
