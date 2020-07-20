@@ -1,13 +1,18 @@
 #!/usr/bin/env nextflow
 
 params.outdir = "/Users/horta/code/iseq-profmark/result"
-params.accfile = "$baseDir/accessions.txt"
 params.hmmfile = "https://iseq-py.s3.eu-west-2.amazonaws.com/Pfam-A_24.hmm"
 params.scriptdir = "$baseDir/script"
 params.chunkSize = 100
+params.domains = "archaea:4,bacteria:10"
 
+seed = 98748
 scriptdir = file(params.scriptdir)
 hmmfile_ch = Channel.value(file(params.hmmfile))
+
+Channel
+   .fromList(params.domains.tokenize(","))
+   .set { domain_specs_ch }
 
 process save_params {
     publishDir params.outdir, mode:"copy"
@@ -23,21 +28,21 @@ process save_params {
 }
 
 process download_organism_names {
-   cache "lenient"
+   input:
+   val domain_spec from domain_specs_ch
 
    output:
-   tuple path("archaea.txt"), path("bacteria.txt") into organisms_ch
+   tuple path("${domain}.txt"), val(nsamples) into domain_files_spec_ch
 
    script:
+   domain = domain_spec.tokenize(":")[0]
+   nsamples = domain_spec.tokenize(":")[1]
    """
-   $scriptdir/download_organism_names.py
-   file archaea.txt
-   file bacteria.txt
+   $scriptdir/download_organism_names.py $domain
    """
 }
 
 process download_genbank_catalog {
-    cache "lenient"
     memory "12 GB"
 
     output:
@@ -50,8 +55,7 @@ process download_genbank_catalog {
 }
 
 process unique_genbank_organisms {
-    cache "deep"
-    memory "60 GB"
+    memory "30 GB"
 
     input:
     path "gb238.catalog.all.tsv" from gb_catalog_ch1
@@ -65,22 +69,23 @@ process unique_genbank_organisms {
     """
 }
 
-process create_accessions_file {
+process sample_accessions {
     input:
     path "gb238.catalog.tsv" from gb_catalog_ch2
-    tuple path("archaea.txt"), path("bacteria.txt") from organisms_ch
+    tuple path(domaintxt), val(nsamples) from domain_files_spec_ch
+
+    output:
+    stdout into (acc_ch1, acc_ch2)
 
     script:
+    domain = domaintxt.name.toString().tokenize(".")[0]
     """
-    file gb238.catalog.tsv
-    file archaea.txt
-    file bacteria.txt
+    $scriptdir/sample_accessions.py gb238.catalog.tsv $domaintxt ${domain}.accessions $nsamples $seed >log.txt
+    cat ${domain}.accessions
     """
 }
 
-Channel
-    .fromList(file(params.accfile).readLines())
-    .into { acc_ch1; acc_ch2 }
+/* accessions_ch.subscribe { println it } */
 
 process copy_hmmfile {
     publishDir params.outdir, mode:"copy"
@@ -111,7 +116,6 @@ process press_hmmfile {
 
 process download_genbank_gb {
     publishDir params.outdir, mode:"copy", saveAs: { name -> "${acc}/$name" }
-    cache "lenient"
 
     input:
     val acc from acc_ch1
@@ -127,7 +131,6 @@ process download_genbank_gb {
 
 process download_genbank_fasta {
     publishDir params.outdir, mode:"copy", saveAs: { name -> "${acc}/$name" }
-    cache "lenient"
 
     input:
     val acc from acc_ch2

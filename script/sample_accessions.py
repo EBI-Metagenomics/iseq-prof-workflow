@@ -1,7 +1,8 @@
+#!/usr/bin/env python
+
 import sys
 from pandas import read_csv
 import random
-from tqdm import tqdm
 import time
 from Bio import Entrez
 
@@ -59,18 +60,16 @@ random.shuffle(organisms)
 
 accessions = []
 majors = set()
-with tqdm(total=size) as pbar:
-    for organism in organisms:
-        major = get_major(organism)
-        if major in majors:
-            continue
-        majors.add(major)
-        acc = get_accession(df, organism)
-        if len(acc) > 0:
-            accessions.append(acc)
-            pbar.update(1)
-        if len(accessions) == size:
-            break
+for organism in organisms:
+    major = get_major(organism)
+    if major in majors:
+        continue
+    majors.add(major)
+    acc = get_accession(df, organism)
+    if len(acc) > 0:
+        accessions.append(acc)
+    if len(accessions) == size:
+        break
 
 with open(outfile, "w") as file:
     for acc in accessions:

@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+import sys
 import random
 from ftplib import FTP, error_perm
 from typing import List
@@ -48,10 +49,11 @@ HOST = "ftp.ncbi.nlm.nih.gov"
 ftp = FTP(HOST)
 ftp.login()
 
-for orgtype in ["archaea", "bacteria"]:
-    ftp.cwd(f"/genomes/refseq/{orgtype}")
+orgtype = sys.argv[1]
 
-    organisms = fetch_organisms(ftp)
-    with open(f"{orgtype}.txt", "w") as file:
-        for organism in organisms:
-            file.write(f"{organism}\n")
+ftp.cwd(f"/genomes/refseq/{orgtype}")
+
+organisms = fetch_organisms(ftp)
+with open(f"{orgtype}.txt", "w") as file:
+    for organism in organisms:
+        file.write(f"{organism}\n")
