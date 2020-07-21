@@ -57,7 +57,7 @@ process download_genbank_catalog {
 
 process merge_genbank_catalogs {
     input:
-    path "*.tsv" from gb_catalog_ch1.collect()
+    path "*" from gb_catalog_ch1.collect()
 
     output:
     path "gb238.catalog.all.tsv" into gb_catalog_ch2
@@ -181,7 +181,7 @@ process hmmscan {
     publishDir params.outdir, mode:"copy", saveAs: { name -> "${acc}/$name" }
 
     input:
-    path hmmdb from hmmdb_ch1
+    path hmmdb from hmmdb_ch1.collect()
     tuple val(acc), path(amino) from cds_amino_ch
 
     output:
@@ -200,7 +200,7 @@ cds_nucl_ch
 
 process iseq_scan {
     input:
-    path hmmdb from hmmdb_ch2
+    path hmmdb from hmmdb_ch2.collect()
     tuple val(acc), path(nucl) from cds_nucl_split_ch
 
     output:
