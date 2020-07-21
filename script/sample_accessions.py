@@ -4,7 +4,7 @@ import sys
 from pandas import read_csv
 import random
 import time
-from Bio import Entrez
+from Bio import Entrez, SeqIO
 
 
 def get_major(organism: str):
@@ -19,24 +19,33 @@ def get_accession(df, organism: str):
     random.shuffle(index)
 
     accession = ""
-    whole_genome = False
     for i in index:
+        time.sleep(2)
+
+        whole_genome = False
         row = df0.loc[i]
         accession = row["Version"]
 
         with Entrez.esummary(db="nucleotide", id=accession) as handle:
             records = Entrez.parse(handle)
-            record = next(records)
+            try:
+                record = next(records)
+            except RuntimeError:
+                continue
+
             if "whole genome shotgun sequence" in record["Title"]:
                 whole_genome = True
-                break
             if "complete genome" in record["Title"]:
                 whole_genome = True
-                break
 
-        time.sleep(3)
+        if not whole_genome:
+            continue
 
-    if whole_genome:
+        with Entrez.efetch(db="nuccore", id=accession, rettype="gb", retmode="text") as handle:
+            record = next(SeqIO.parse(handle, "genbank"))
+            if len(record.features) <= 1:
+                continue
+
         return accession
     return ""
 
