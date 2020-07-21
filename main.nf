@@ -43,14 +43,28 @@ process download_organism_names {
 }
 
 process download_genbank_catalog {
-    memory "12 GB"
+    input:
+    val db from Channel.fromList(["gss", "other"])
 
     output:
-    path "gb238.catalog.all.tsv" into gb_catalog_ch1
+    path "gb238.catalog.${db}.tsv" into gb_catalog_ch1
 
     script:
     """
-    $scriptdir/download_genbank_catalog.sh
+    $scriptdir/download_genbank_catalog.sh $db gb238.catalog.${db}.tsv
+    """
+}
+
+process merge_genbank_catalogs {
+    input:
+    path "*.tsv" from gb_catalog_ch1.collect()
+
+    output:
+    path "gb238.catalog.all.tsv" into gb_catalog_ch2
+
+    script:
+    """
+    $scriptdir/merge_genbank_catalog.sh *.tsv gb238.catalog.all.tsv
     """
 }
 
@@ -58,10 +72,10 @@ process unique_genbank_organisms {
     memory "30 GB"
 
     input:
-    path "gb238.catalog.all.tsv" from gb_catalog_ch1
+    path "gb238.catalog.all.tsv" from gb_catalog_ch2
 
     output:
-    path "gb238.catalog.tsv" into gb_catalog_ch2
+    path "gb238.catalog.tsv" into gb_catalog_ch3
 
     script:
     """
@@ -71,7 +85,7 @@ process unique_genbank_organisms {
 
 process sample_accessions {
     input:
-    path "gb238.catalog.tsv" from gb_catalog_ch2
+    path "gb238.catalog.tsv" from gb_catalog_ch3
     tuple path(domaintxt), val(nsamples) from domain_files_spec_ch
 
     output:

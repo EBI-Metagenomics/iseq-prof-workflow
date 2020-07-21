@@ -43,7 +43,10 @@ def get_accession(df, organism: str):
 
         with Entrez.efetch(db="nuccore", id=accession, rettype="gb", retmode="text") as handle:
             record = next(SeqIO.parse(handle, "genbank"))
-            if len(record.features) <= 1:
+            for feature in record.features:
+                if feature.type.lower() == "cds":
+                    break
+            else:
                 continue
 
         return accession
