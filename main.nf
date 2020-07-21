@@ -117,6 +117,7 @@ process press_hmmfile {
 
 process download_genbank_gb {
     publishDir params.outdir, mode:"copy", saveAs: { name -> "${acc}/$name" }
+    maxForks 1
 
     input:
     val acc from acc_ch1
@@ -132,6 +133,7 @@ process download_genbank_gb {
 
 process download_genbank_fasta {
     publishDir params.outdir, mode:"copy", saveAs: { name -> "${acc}/$name" }
+    maxForks 1
 
     input:
     val acc from acc_ch2
