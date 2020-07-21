@@ -5,10 +5,29 @@ from pandas import read_csv
 import random
 import time
 from Bio import Entrez, SeqIO
+from Bio.Alphabet import IUPAC, DNAAlphabet, RNAAlphabet
 
 
 def get_major(organism: str):
     return organism.split("_")[0]
+
+def is_alphabet_ambiguous(seq):
+
+    if isinstance(seq.alphabet, DNAAlphabet):
+        remains = len(set(str(seq)) - set(IUPAC.unambiguous_dna.letters))
+        if remains > 0:
+            return True
+
+    elif isinstance(seq.alphabet, RNAAlphabet):
+        remains = len(set(str(seq)) - set(IUPAC.unambiguous_rna.letters))
+        if remains > 0:
+            return True
+
+    else:
+        raise ValueError("Unkown alphabet.")
+
+    return False
+
 
 
 def get_accession(df, organism: str):
@@ -45,7 +64,8 @@ def get_accession(df, organism: str):
             record = next(SeqIO.parse(handle, "genbank"))
             for feature in record.features:
                 if feature.type.lower() == "cds":
-                    break
+                    if not is_alphabet_ambiguous(feature.extract(record).seq):
+                        break
             else:
                 continue
 
