@@ -1,14 +1,13 @@
 #!/usr/bin/env nextflow
 
 params.outdir = "/Users/horta/code/iseq-profmark/result"
-params.hmmfile = "https://iseq-py.s3.eu-west-2.amazonaws.com/Pfam-A_24.hmm"
+params.hmmfile = "ftp://ftp.ebi.ac.uk/pub/databases/Pfam/releases/Pfam33.1/Pfam-A.hmm.gz"
 params.scriptdir = "$baseDir/script"
-params.chunkSize = 100
+params.chunkSize = 10
+params.seed = 98748
 params.domains = "archaea:4,bacteria:10"
 
-seed = 98748
 scriptdir = file(params.scriptdir)
-hmmfile_ch = Channel.value(file(params.hmmfile))
 
 Channel
    .fromList(params.domains.tokenize(","))
@@ -25,6 +24,18 @@ process save_params {
     """
     echo $params_cmd > params.txt
     """
+}
+
+process download_pfam_hmm {
+   publishDir params.outdir, mode:"copy"
+
+   output:
+   path "db.hmm" into hmmfile_ch
+
+   script:
+   """
+   curl -s $params.hmmfile | gunzip -c > db.hmm
+   """
 }
 
 process download_organism_names {
@@ -94,27 +105,13 @@ process sample_accessions {
     script:
     domain = domaintxt.name.toString().tokenize(".")[0]
     """
-    $scriptdir/sample_accessions.py gb238.catalog.tsv $domaintxt accessions $nsamples $seed
+    $scriptdir/sample_accessions.py gb238.catalog.tsv $domaintxt accessions $nsamples $params.seed
     """
 }
 
 acc_file_ch
    .splitText() { it.trim() }
    .into { acc_ch1; acc_ch2 }
-
-process copy_hmmfile {
-    publishDir params.outdir, mode:"copy"
-
-    input:
-    path hmmfile from hmmfile_ch
-
-    output:
-    path "*.hmm", includeInputs: true
-
-    script:
-    """
-    """
-}
 
 process press_hmmfile {
     input:
@@ -199,6 +196,8 @@ cds_nucl_ch
     .set { cds_nucl_split_ch }
 
 process iseq_scan {
+    memory "8 GB"
+
     input:
     path hmmdb from hmmdb_ch2.collect()
     tuple val(acc), path(nucl) from cds_nucl_split_ch
@@ -214,7 +213,7 @@ process iseq_scan {
     hmmfile=\$(ls *.hmm)
     iseq pscan2 \$hmmfile $nucl --hit-prefix chunk_${chunk}_item\
         --output ${acc}_output.gff --oamino ${acc}_oamino.fasta\
-        --ocodon ${acc}_ocodon.fasta --quiet
+        --ocodon ${acc}_ocodon.fasta --no-cut-ga
     """
 }
 
