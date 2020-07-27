@@ -3,7 +3,7 @@
 params.outdir = "/Users/horta/code/iseq-profmark/result"
 params.hmmfile = "ftp://ftp.ebi.ac.uk/pub/databases/Pfam/releases/Pfam33.1/Pfam-A.hmm.gz"
 params.scriptdir = "$baseDir/script"
-params.chunkSize = 10
+params.chunkSize = 50
 params.seed = 98748
 params.domains = "archaea:4,bacteria:10"
 
@@ -118,7 +118,7 @@ process press_hmmfile {
     path hmmfile from hmmfile_ch
 
     output:
-    path "*.hmm*", includeInputs: true into hmmdb_ch1, hmmdb_ch2
+    path "*.hmm*", includeInputs: true into hmmdb_ch
 
     script:
     """
@@ -170,7 +170,9 @@ process extract_cds {
 
     script:
     """
-    $scriptdir/extract_cds.py $gb cds_amino.fasta cds_nucl.fasta
+    $scriptdir/extract_cds.py $gb _cds_amino.fasta _cds_nucl.fasta
+    $scriptdir/downsample_fasta.py _cds_amino.fasta cds_amino.fasta 100
+    $scriptdir/downsample_fasta.py _cds_nucl.fasta cds_nucl.fasta 100
     """
 }
 
@@ -178,7 +180,7 @@ process hmmscan {
     publishDir params.outdir, mode:"copy", saveAs: { name -> "${acc}/$name" }
 
     input:
-    path hmmdb from hmmdb_ch1.collect()
+    path hmmdb from hmmdb_ch.collect()
     tuple val(acc), path(amino) from cds_amino_ch
 
     output:
@@ -187,49 +189,66 @@ process hmmscan {
     script:
     """
     hmmfile=\$(ls *.hmm)
-    hmmscan --cut_ga --domtblout domtblout.txt \$hmmfile $amino
+    hmmscan --noali --cut_ga --domtblout domtblout.txt \$hmmfile $amino
+    """
+}
+
+process create_true_false_profiles {
+    publishDir params.outdir, mode:"copy", saveAs: { name -> "${acc}/$name" }
+
+    input:
+    path hmmdb from hmmdb_ch.collect()
+    tuple val(acc), path("domtblout.txt") from hmmscan_output_ch
+
+    output:
+    tuple val(acc), path("*.hmm*") into dbspace_ch
+
+    script:
+    """
+    hmmfile=\$(ls *.hmm)
+    $scriptdir/create_true_false_profiles.py domtblout.txt \$hmmfile accspace.txt dbspace.hmm $params.seed
+    hmmfetch --index dbspace.hmm
     """
 }
 
 cds_nucl_ch
-    .splitFasta(by: params.chunkSize, file:true, elem:1)
-    .set { cds_nucl_split_ch }
+   .join(dbspace_ch)
+   .splitFasta(by:params.chunkSize, file:true, elem:1)
+   .set { cds_nucl_db_split_ch }
 
 process iseq_scan {
+    publishDir params.outdir, mode:"copy", saveAs: { name -> "${acc}/chunks/$name" }
+
     memory "8 GB"
 
     input:
-    path hmmdb from hmmdb_ch2.collect()
-    tuple val(acc), path(nucl) from cds_nucl_split_ch
+    tuple val(acc), path(nucl), path(dbspace) from cds_nucl_db_split_ch
 
     output:
-    path "${acc}_output.gff" into iseq_output_split_ch
-    path "${acc}_oamino.fasta" into iseq_oamino_split_ch
-    path "${acc}_ocodon.fasta" into iseq_ocodon_split_ch
+    tuple val(acc), path("output.*.gff") into iseq_output_split_ch
+    tuple val(acc), path("oamino.*.fasta") into iseq_oamino_split_ch
+    tuple val(acc), path("ocodon.*.fasta") into iseq_ocodon_split_ch
 
     script:
     chunk = nucl.name.toString().tokenize('.')[-2]
     """
     hmmfile=\$(ls *.hmm)
-    iseq pscan2 \$hmmfile $nucl --hit-prefix chunk_${chunk}_item\
-        --output ${acc}_output.gff --oamino ${acc}_oamino.fasta\
-        --ocodon ${acc}_ocodon.fasta --no-cut-ga
+    iseq pscan3 \$hmmfile $nucl --hit-prefix chunk_${chunk}_item\
+        --output output.${chunk}.gff --oamino oamino.${chunk}.fasta\
+        --ocodon ocodon.${chunk}.fasta
     """
 }
 
 iseq_output_split_ch
    .collectFile(keepHeader:true, skip:1)
-   .map { [it.name.toString().tokenize('_')[0], it] }
    .set { iseq_output_ch }
 
 iseq_oamino_split_ch
    .collectFile()
-   .map { [it.name.toString().tokenize('_')[0], it] }
    .set { iseq_oamino_ch }
 
 iseq_ocodon_split_ch
    .collectFile()
-   .map { [it.name.toString().tokenize('_')[0], it] }
    .set { iseq_ocodon_ch }
 
 iseq_output_ch
