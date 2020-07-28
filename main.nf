@@ -5,16 +5,17 @@ params.hmmfile = "ftp://ftp.ebi.ac.uk/pub/databases/Pfam/releases/Pfam33.1/Pfam-
 params.scriptdir = "$baseDir/script"
 params.chunkSize = 50
 params.seed = 98748
+params.downsample_cds = 0
 params.domains = "archaea:4,bacteria:10"
 
 scriptdir = file(params.scriptdir)
 
 Channel
-   .fromList(params.domains.tokenize(","))
-   .set { domain_specs_ch }
+    .fromList(params.domains.tokenize(","))
+    .set { domain_specs_ch }
 
 process save_params {
-    publishDir params.outdir, mode:"copy"
+     publishDir params.outdir, mode:"copy"
 
     output:
     path "params.txt"
@@ -27,33 +28,36 @@ process save_params {
 }
 
 process download_pfam_hmm {
-   publishDir params.outdir, mode:"copy"
+    publishDir params.outdir, mode:"copy"
+    storeDir "/hps/research/finn/horta/db/pfam"
 
-   output:
-   path "db.hmm" into hmmfile_ch
+    output:
+    path "db.hmm" into hmmfile_ch
 
-   script:
-   """
-   curl -s $params.hmmfile | gunzip -c > db.hmm
-   """
+    script:
+    """
+    curl -s $params.hmmfile | gunzip -c > db.hmm
+    """
 }
 
 process download_organism_names {
-   input:
-   val domain_spec from domain_specs_ch
+    input:
+    val domain_spec from domain_specs_ch
 
-   output:
-   tuple path("${domain}.txt"), val(nsamples) into domain_files_spec_ch
+    output:
+    tuple path("${domain}.txt"), val(nsamples) into domain_files_spec_ch
 
-   script:
-   domain = domain_spec.tokenize(":")[0]
-   nsamples = domain_spec.tokenize(":")[1]
-   """
-   $scriptdir/download_organism_names.py $domain
-   """
+    script:
+    domain = domain_spec.tokenize(":")[0]
+    nsamples = domain_spec.tokenize(":")[1]
+    """
+    $scriptdir/download_organism_names.py $domain
+    """
 }
 
 process download_genbank_catalog {
+    storeDir "/hps/research/finn/horta/db/genbank"
+
     input:
     val db from Channel.fromList(["gss", "other"])
 
@@ -67,6 +71,8 @@ process download_genbank_catalog {
 }
 
 process merge_genbank_catalogs {
+    storeDir "/hps/research/finn/horta/db/genbank"
+
     input:
     path "*" from gb_catalog_ch1.collect()
 
@@ -81,6 +87,7 @@ process merge_genbank_catalogs {
 
 process unique_genbank_organisms {
     memory "30 GB"
+    storeDir "/hps/research/finn/horta/db/genbank"
 
     input:
     path "gb238.catalog.all.tsv" from gb_catalog_ch2
@@ -170,9 +177,14 @@ process extract_cds {
 
     script:
     """
-    $scriptdir/extract_cds.py $gb _cds_amino.fasta _cds_nucl.fasta
-    $scriptdir/downsample_fasta.py _cds_amino.fasta cds_amino.fasta 100
-    $scriptdir/downsample_fasta.py _cds_nucl.fasta cds_nucl.fasta 100
+    $scriptdir/extract_cds.py $gb cds_amino.fasta cds_nucl.fasta
+    if [[ "$params.downsample_cds" != "0" ]];
+    then
+       $scriptdir/downsample_fasta.py cds_amino.fasta .cds_amino.fasta $params.downsample_cds
+       mv .cds_amino.fasta cds_amino.fasta
+       $scriptdir/downsample_fasta.py cds_nucl.fasta .cds_nucl.fasta $params.downsample_cds
+       mv .cds_nucl.fasta cds_nucl.fasta
+    fi
     """
 }
 
@@ -241,36 +253,33 @@ process iseq_scan {
 
 iseq_output_split_ch
    .collectFile(keepHeader:true, skip:1)
+   .map { ["output.gff", it] }
    .set { iseq_output_ch }
 
 iseq_oamino_split_ch
    .collectFile()
+   .map { ["oamino.fasta", it] }
    .set { iseq_oamino_ch }
 
 iseq_ocodon_split_ch
    .collectFile()
+   .map { ["ocodon.fasta", it] }
    .set { iseq_ocodon_ch }
 
 iseq_output_ch
-   .join(iseq_oamino_ch)
-   .join(iseq_ocodon_ch)
+   .mix(iseq_oamino_ch, iseq_ocodon_ch)
    .set { iseq_results_ch }
 
-process save_iseq_results {
-    publishDir params.outdir, mode:"copy", saveAs: { name -> "${acc}/$name" }
+process save_output {
+    publishDir params.outdir, mode:"copy", saveAs: { name -> "${acc}/${name}" }
 
     input:
-    tuple val(acc), path(output), path(oamino), path(ocodon) from iseq_results_ch
+    tuple val(name), path(acc) from iseq_results_ch
 
     output:
-    path("output.gff")
-    path("oamino.fasta")
-    path("ocodon.fasta")
+    path(name)
 
     script:
     """
-    mv $output output.gff
-    mv $oamino oamino.fasta
-    mv $ocodon ocodon.fasta
     """
 }
