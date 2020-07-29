@@ -235,7 +235,8 @@ cds_nucl_ch
 process iseq_scan {
     publishDir params.outdir, mode:"copy", saveAs: { name -> "${acc}/chunks/$name" }
 
-    errorStrategy "finish"
+    errorStrategy "retry"
+    maxRetries 2
     memory "8 GB"
 
     input:
