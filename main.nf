@@ -1,5 +1,6 @@
 #!/usr/bin/env nextflow
 
+params.store = "/hps/research/finn/horta/db"
 params.outdir = "/Users/horta/code/iseq-profmark/result"
 params.hmmfile = "ftp://ftp.ebi.ac.uk/pub/databases/Pfam/releases/Pfam33.1/Pfam-A.hmm.gz"
 params.scriptdir = "$baseDir/script"
@@ -29,7 +30,7 @@ process save_params {
 
 process download_pfam_hmm {
     publishDir params.outdir, mode:"copy"
-    storeDir "/hps/research/finn/horta/db/pfam"
+    storeDir "$params.store/pfam"
 
     output:
     path "db.hmm" into hmmfile_ch
@@ -56,7 +57,7 @@ process download_organism_names {
 }
 
 process download_genbank_catalog {
-    storeDir "/hps/research/finn/horta/db/genbank"
+    storeDir "$params.store/genbank"
 
     input:
     val db from Channel.fromList(["gss", "other"])
@@ -71,7 +72,7 @@ process download_genbank_catalog {
 }
 
 process merge_genbank_catalogs {
-    storeDir "/hps/research/finn/horta/db/genbank"
+    storeDir "$params.store/genbank"
 
     input:
     path "*" from gb_catalog_ch1.collect()
@@ -87,7 +88,7 @@ process merge_genbank_catalogs {
 
 process unique_genbank_organisms {
     memory "30 GB"
-    storeDir "/hps/research/finn/horta/db/genbank"
+    storeDir "$params.store/genbank"
 
     input:
     path "gb238.catalog.all.tsv" from gb_catalog_ch2
@@ -117,8 +118,8 @@ process sample_accessions {
 }
 
 acc_file_ch
-   .splitText() { it.trim() }
-   .into { acc_ch1; acc_ch2 }
+    .splitText() { it.trim() }
+    .into { acc_ch1; acc_ch2 }
 
 process press_hmmfile {
     input:
@@ -135,33 +136,35 @@ process press_hmmfile {
 
 process download_genbank_gb {
     publishDir params.outdir, mode:"copy", saveAs: { name -> "${acc}/$name" }
+    storeDir "$params.store/genbank"
     maxForks 1
 
     input:
     val acc from acc_ch1
 
     output:
-    tuple val(acc), path("genbank.gb") into genbank_gb_ch
+    tuple val(acc), path("${acc}.gb") into genbank_gb_ch
 
     script:
     """
-    $scriptdir/download_genbank.py $acc gb genbank.gb
+    $scriptdir/download_genbank.py $acc gb ${acc}.gb
     """
 }
 
 process download_genbank_fasta {
     publishDir params.outdir, mode:"copy", saveAs: { name -> "${acc}/$name" }
+    storeDir "$params.store/genbank"
     maxForks 1
 
     input:
     val acc from acc_ch2
 
     output:
-    tuple val(acc), path("genbank.fasta") into genbank_fasta_ch
+    tuple val(acc), path("${acc}.fasta") into genbank_fasta_ch
 
     script:
     """
-    $scriptdir/download_genbank.py $acc fasta genbank.fasta
+    $scriptdir/download_genbank.py $acc fasta ${acc}.fasta
     """
 }
 
@@ -190,6 +193,7 @@ process extract_cds {
 
 process hmmscan {
     publishDir params.outdir, mode:"copy", saveAs: { name -> "${acc}/$name" }
+    cpus 4
 
     input:
     path hmmdb from hmmdb_ch.collect()
@@ -201,7 +205,7 @@ process hmmscan {
     script:
     """
     hmmfile=\$(ls *.hmm)
-    hmmscan --noali --cut_ga --domtblout domtblout.txt \$hmmfile $amino
+    hmmscan --noali --cut_ga --domtblout domtblout.txt --cpu ${task.cpus} \$hmmfile $amino
     """
 }
 
@@ -224,13 +228,14 @@ process create_true_false_profiles {
 }
 
 cds_nucl_ch
-   .join(dbspace_ch)
-   .splitFasta(by:params.chunkSize, file:true, elem:1)
-   .set { cds_nucl_db_split_ch }
+    .join(dbspace_ch)
+    .splitFasta(by:params.chunkSize, file:true, elem:1)
+    .set { cds_nucl_db_split_ch }
 
 process iseq_scan {
     publishDir params.outdir, mode:"copy", saveAs: { name -> "${acc}/chunks/$name" }
 
+    errorStrategy "finish"
     memory "8 GB"
 
     input:
@@ -247,28 +252,29 @@ process iseq_scan {
     hmmfile=\$(ls *.hmm)
     iseq pscan3 \$hmmfile $nucl --hit-prefix chunk_${chunk}_item\
         --output output.${chunk}.gff --oamino oamino.${chunk}.fasta\
-        --ocodon ocodon.${chunk}.fasta
+        --ocodon ocodon.${chunk}.fasta\
+        --no-cut-ga --no-heuristic
     """
 }
 
 iseq_output_split_ch
-   .collectFile(keepHeader:true, skip:1)
-   .map { ["output.gff", it] }
-   .set { iseq_output_ch }
+    .collectFile(keepHeader:true, skip:1)
+    .map { ["output.gff", it] }
+    .set { iseq_output_ch }
 
 iseq_oamino_split_ch
-   .collectFile()
-   .map { ["oamino.fasta", it] }
-   .set { iseq_oamino_ch }
+    .collectFile()
+    .map { ["oamino.fasta", it] }
+    .set { iseq_oamino_ch }
 
 iseq_ocodon_split_ch
-   .collectFile()
-   .map { ["ocodon.fasta", it] }
-   .set { iseq_ocodon_ch }
+    .collectFile()
+    .map { ["ocodon.fasta", it] }
+    .set { iseq_ocodon_ch }
 
 iseq_output_ch
-   .mix(iseq_oamino_ch, iseq_ocodon_ch)
-   .set { iseq_results_ch }
+    .mix(iseq_oamino_ch, iseq_ocodon_ch)
+    .set { iseq_results_ch }
 
 process save_output {
     publishDir params.outdir, mode:"copy", saveAs: { name -> "${acc}/${name}" }
@@ -281,5 +287,6 @@ process save_output {
 
     script:
     """
+    mv $acc $name
     """
 }
