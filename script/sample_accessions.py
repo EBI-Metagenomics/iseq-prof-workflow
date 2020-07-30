@@ -7,9 +7,12 @@ import time
 from Bio import Entrez, SeqIO
 from Bio.Alphabet import IUPAC, DNAAlphabet, RNAAlphabet
 
+taxname = {"virus": "Viruses", "archaea": "Archaea", "bacteria": "Bacteria"}
+
 
 def get_major(organism: str):
     return organism.split("_")[0]
+
 
 def is_alphabet_ambiguous(seq):
 
@@ -29,8 +32,7 @@ def is_alphabet_ambiguous(seq):
     return False
 
 
-
-def get_accession(df, organism: str):
+def get_accession(df, organism: str, family: str):
     major = get_major(organism)
     df0 = df.loc[df.Organism.str.startswith(major)]
 
@@ -39,7 +41,7 @@ def get_accession(df, organism: str):
 
     accession = ""
     for i in index:
-        time.sleep(2)
+        time.sleep(0.2)
 
         whole_genome = False
         row = df0.loc[i]
@@ -60,8 +62,13 @@ def get_accession(df, organism: str):
         if not whole_genome:
             continue
 
-        with Entrez.efetch(db="nuccore", id=accession, rettype="gb", retmode="text") as handle:
+        with Entrez.efetch(
+            db="nuccore", id=accession, rettype="gb", retmode="text"
+        ) as handle:
             record = next(SeqIO.parse(handle, "genbank"))
+            if taxname[family] not in record.annotations["taxonomy"]:
+                continue
+
             for feature in record.features:
                 if feature.type.lower() == "cds":
                     if not is_alphabet_ambiguous(feature.extract(record).seq):
@@ -81,6 +88,8 @@ outfile = sys.argv[3]
 size = int(sys.argv[4])
 seed = int(sys.argv[5])
 
+family = infile.split(".")[0]
+
 random.seed(seed)
 
 df = read_csv(catagfile, sep="\t", header=0)
@@ -97,11 +106,15 @@ for organism in organisms:
     if major in majors:
         continue
     majors.add(major)
-    acc = get_accession(df, organism)
+    acc = get_accession(df, organism, family)
     if len(acc) > 0:
         accessions.append(acc)
+        print(f"New accession {len(accessions)}: {acc}")
     if len(accessions) == size:
         break
+
+if len(accessions) != size:
+    raise RuntimeError(f"Could not fetch {size} accessions.")
 
 with open(outfile, "w") as file:
     for acc in accessions:

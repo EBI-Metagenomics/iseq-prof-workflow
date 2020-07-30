@@ -22,7 +22,7 @@ with tqdm(total=3) as pbar:
     df = pd.read_csv(input_file, sep="\t", header=0, dtype=dtype)
     pbar.update(1)
 
-    df = df.loc[df.reset_index().groupby(['Organism'])['BasePairs'].idxmax()]
+    df = df.loc[df.reset_index().groupby(["Organism"])["BasePairs"].idxmax()]
     pbar.update(1)
 
     df.to_csv(output_file, encoding="ascii", sep="\t", index=False)

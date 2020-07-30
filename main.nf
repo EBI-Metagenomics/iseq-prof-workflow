@@ -138,6 +138,7 @@ process download_genbank_gb {
     publishDir params.outputDir, mode:"copy", saveAs: { name -> "${acc}/$name" }
     storeDir "$params.storageDir/genbank"
     maxForks 1
+    beforeScript "echo BEFORE SCRIPT"
 
     input:
     val acc from acc_ch1
@@ -147,6 +148,7 @@ process download_genbank_gb {
 
     script:
     """
+    echo Download genbank_gb, please.
     $scriptDir/download_genbank.py $acc gb ${acc}.gb
     """
 }
@@ -155,6 +157,7 @@ process download_genbank_fasta {
     publishDir params.outputDir, mode:"copy", saveAs: { name -> "${acc}/$name" }
     storeDir "$params.storageDir/genbank"
     maxForks 1
+    beforeScript "echo BEFORE SCRIPT"
 
     input:
     val acc from acc_ch2
@@ -164,6 +167,7 @@ process download_genbank_fasta {
 
     script:
     """
+    echo Download genbank_fasta, please.
     $scriptDir/download_genbank.py $acc fasta ${acc}.fasta
     """
 }
