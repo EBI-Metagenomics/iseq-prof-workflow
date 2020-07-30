@@ -1,22 +1,22 @@
 #!/usr/bin/env nextflow
 
-params.store = "/hps/research/finn/horta/db"
-params.outdir = "/Users/horta/code/iseq-profmark/result"
-params.hmmfile = "ftp://ftp.ebi.ac.uk/pub/databases/Pfam/releases/Pfam33.1/Pfam-A.hmm.gz"
-params.scriptdir = "$baseDir/script"
-params.chunkSize = 50
-params.seed = 98748
-params.downsample_cds = 0
-params.domains = "archaea:4,bacteria:10"
+println " "
+println "Nextflow pipeline"
+println " "
+println "using profile: $workflow.profile"
+println "using params: $params"
+println " "
 
-scriptdir = file(params.scriptdir)
+
+
+scriptDir = file("$projectDir/script")
 
 Channel
     .fromList(params.domains.tokenize(","))
     .set { domain_specs_ch }
 
 process save_params {
-     publishDir params.outdir, mode:"copy"
+    publishDir params.outputDir, mode:"copy"
 
     output:
     path "params.txt"
@@ -29,8 +29,8 @@ process save_params {
 }
 
 process download_pfam_hmm {
-    publishDir params.outdir, mode:"copy"
-    storeDir "$params.store/pfam"
+    publishDir params.outputDir, mode:"copy"
+    storeDir "$params.storageDir/pfam"
 
     output:
     path "db.hmm" into hmmfile_ch
@@ -52,12 +52,12 @@ process download_organism_names {
     domain = domain_spec.tokenize(":")[0]
     nsamples = domain_spec.tokenize(":")[1]
     """
-    $scriptdir/download_organism_names.py $domain
+    $scriptDir/download_organism_names.py $domain
     """
 }
 
 process download_genbank_catalog {
-    storeDir "$params.store/genbank"
+    storeDir "$params.storageDir/genbank"
 
     input:
     val db from Channel.fromList(["gss", "other"])
@@ -67,12 +67,12 @@ process download_genbank_catalog {
 
     script:
     """
-    $scriptdir/download_genbank_catalog.sh $db gb238.catalog.${db}.tsv
+    $scriptDir/download_genbank_catalog.sh $db gb238.catalog.${db}.tsv
     """
 }
 
 process merge_genbank_catalogs {
-    storeDir "$params.store/genbank"
+    storeDir "$params.storageDir/genbank"
 
     input:
     path "*" from gb_catalog_ch1.collect()
@@ -82,13 +82,13 @@ process merge_genbank_catalogs {
 
     script:
     """
-    $scriptdir/merge_genbank_catalog.sh *.tsv gb238.catalog.all.tsv
+    $scriptDir/merge_genbank_catalog.sh *.tsv gb238.catalog.all.tsv
     """
 }
 
 process unique_genbank_organisms {
     memory "30 GB"
-    storeDir "$params.store/genbank"
+    storeDir "$params.storageDir/genbank"
 
     input:
     path "gb238.catalog.all.tsv" from gb_catalog_ch2
@@ -98,7 +98,7 @@ process unique_genbank_organisms {
 
     script:
     """
-    $scriptdir/unique_genbank_catalog.py gb238.catalog.all.tsv gb238.catalog.tsv
+    $scriptDir/unique_genbank_catalog.py gb238.catalog.all.tsv gb238.catalog.tsv
     """
 }
 
@@ -113,7 +113,7 @@ process sample_accessions {
     script:
     domain = domaintxt.name.toString().tokenize(".")[0]
     """
-    $scriptdir/sample_accessions.py gb238.catalog.tsv $domaintxt accessions $nsamples $params.seed
+    $scriptDir/sample_accessions.py gb238.catalog.tsv $domaintxt accessions $nsamples $params.seed
     """
 }
 
@@ -135,8 +135,8 @@ process press_hmmfile {
 }
 
 process download_genbank_gb {
-    publishDir params.outdir, mode:"copy", saveAs: { name -> "${acc}/$name" }
-    storeDir "$params.store/genbank"
+    publishDir params.outputDir, mode:"copy", saveAs: { name -> "${acc}/$name" }
+    storeDir "$params.storageDir/genbank"
     maxForks 1
 
     input:
@@ -147,13 +147,13 @@ process download_genbank_gb {
 
     script:
     """
-    $scriptdir/download_genbank.py $acc gb ${acc}.gb
+    $scriptDir/download_genbank.py $acc gb ${acc}.gb
     """
 }
 
 process download_genbank_fasta {
-    publishDir params.outdir, mode:"copy", saveAs: { name -> "${acc}/$name" }
-    storeDir "$params.store/genbank"
+    publishDir params.outputDir, mode:"copy", saveAs: { name -> "${acc}/$name" }
+    storeDir "$params.storageDir/genbank"
     maxForks 1
 
     input:
@@ -164,12 +164,12 @@ process download_genbank_fasta {
 
     script:
     """
-    $scriptdir/download_genbank.py $acc fasta ${acc}.fasta
+    $scriptDir/download_genbank.py $acc fasta ${acc}.fasta
     """
 }
 
 process extract_cds {
-    publishDir params.outdir, mode:"copy", saveAs: { name -> "${acc}/$name" }
+    publishDir params.outputDir, mode:"copy", saveAs: { name -> "${acc}/$name" }
 
     input:
     tuple val(acc), path(gb) from genbank_gb_ch
@@ -180,20 +180,24 @@ process extract_cds {
 
     script:
     """
-    $scriptdir/extract_cds.py $gb cds_amino.fasta cds_nucl.fasta
-    if [[ "$params.downsample_cds" != "0" ]];
+    $scriptDir/extract_cds.py $gb cds_amino.fasta cds_nucl.fasta
+    if [[ "$params.downsampleCDS" != "0" ]];
     then
-       $scriptdir/downsample_fasta.py cds_amino.fasta .cds_amino.fasta $params.downsample_cds
+       $scriptDir/downsample_fasta.py cds_amino.fasta .cds_amino.fasta $params.downsampleCDS
        mv .cds_amino.fasta cds_amino.fasta
-       $scriptdir/downsample_fasta.py cds_nucl.fasta .cds_nucl.fasta $params.downsample_cds
+       $scriptDir/downsample_fasta.py cds_nucl.fasta .cds_nucl.fasta $params.downsampleCDS
        mv .cds_nucl.fasta cds_nucl.fasta
     fi
     """
 }
 
 process hmmscan {
-    publishDir params.outdir, mode:"copy", saveAs: { name -> "${acc}/$name" }
+    publishDir params.outputDir, mode:"copy", saveAs: { name -> "${acc}/$name" }
     cpus 4
+    stageInMode "copy"
+    scratch true
+    memory "8 GB"
+    clusterOptions '-R "rusage[scratch=5120]"'
 
     input:
     path hmmdb from hmmdb_ch.collect()
@@ -205,12 +209,12 @@ process hmmscan {
     script:
     """
     hmmfile=\$(ls *.hmm)
-    hmmscan --noali --cut_ga --domtblout domtblout.txt --cpu ${task.cpus} \$hmmfile $amino
+    hmmscan -o /dev/null --noali --cut_ga --domtblout domtblout.txt --cpu ${task.cpus} \$hmmfile $amino
     """
 }
 
 process create_true_false_profiles {
-    publishDir params.outdir, mode:"copy", saveAs: { name -> "${acc}/$name" }
+    publishDir params.outputDir, mode:"copy", saveAs: { name -> "${acc}/$name" }
 
     input:
     path hmmdb from hmmdb_ch.collect()
@@ -222,7 +226,7 @@ process create_true_false_profiles {
     script:
     """
     hmmfile=\$(ls *.hmm)
-    $scriptdir/create_true_false_profiles.py domtblout.txt \$hmmfile accspace.txt dbspace.hmm $params.seed
+    $scriptDir/create_true_false_profiles.py domtblout.txt \$hmmfile accspace.txt dbspace.hmm $params.seed
     hmmfetch --index dbspace.hmm
     """
 }
@@ -233,11 +237,15 @@ cds_nucl_ch
     .set { cds_nucl_db_split_ch }
 
 process iseq_scan {
-    publishDir params.outdir, mode:"copy", saveAs: { name -> "${acc}/chunks/$name" }
+    publishDir params.outputDir, mode:"copy", saveAs: { name -> "${acc}/chunks/$name" }
 
     errorStrategy "retry"
     maxRetries 2
+    /* maxForks 100 */
+    stageInMode "copy"
+    scratch true
     memory "8 GB"
+    clusterOptions '-R "rusage[scratch=5120]"'
 
     input:
     tuple val(acc), path(nucl), path(dbspace) from cds_nucl_db_split_ch
@@ -254,7 +262,7 @@ process iseq_scan {
     iseq pscan3 \$hmmfile $nucl --hit-prefix chunk_${chunk}_item\
         --output output.${chunk}.gff --oamino oamino.${chunk}.fasta\
         --ocodon ocodon.${chunk}.fasta\
-        --no-cut-ga --no-heuristic
+        --no-cut-ga --no-heuristic --quiet
     """
 }
 
@@ -278,7 +286,7 @@ iseq_output_ch
     .set { iseq_results_ch }
 
 process save_output {
-    publishDir params.outdir, mode:"copy", saveAs: { name -> "${acc}/${name}" }
+    publishDir params.outputDir, mode:"copy", saveAs: { name -> "${acc}/${name}" }
 
     input:
     tuple val(name), path(acc) from iseq_results_ch
