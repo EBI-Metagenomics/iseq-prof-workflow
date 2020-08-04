@@ -41,7 +41,7 @@ def get_accession(df, organism: str, family: str):
 
     accession = ""
     for i in index:
-        time.sleep(0.2)
+        time.sleep(0.8)
 
         whole_genome = False
         row = df0.loc[i]
