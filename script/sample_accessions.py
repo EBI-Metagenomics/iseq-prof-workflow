@@ -41,7 +41,7 @@ def get_accession(df, organism: str, family: str):
 
     accession = ""
     for i in index:
-        time.sleep(0.8)
+        time.sleep(1.2)
 
         whole_genome = False
         row = df0.loc[i]
@@ -62,6 +62,7 @@ def get_accession(df, organism: str, family: str):
         if not whole_genome:
             continue
 
+        time.sleep(0.2)
         with Entrez.efetch(
             db="nuccore", id=accession, rettype="gb", retmode="text"
         ) as handle:
