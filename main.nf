@@ -103,6 +103,9 @@ process unique_genbank_organisms {
 }
 
 process sample_accessions {
+    errorStrategy "retry"
+    maxRetries 2
+
     input:
     path "gb238.catalog.tsv" from gb_catalog_ch3
     tuple path(domaintxt), val(nsamples) from domain_files_spec_ch
