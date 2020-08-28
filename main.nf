@@ -288,7 +288,7 @@ iseq_output_ch
     .set { iseq_results_ch }
 
 process save_output {
-    publishDir params.outputDir, mode:"copy", saveAs: { name -> "${acc}/${name}" }
+    publishDir params.outputDir, mode:"copy", saveAs: { name -> "${acc}/${name}" }, overwrite: true
 
     input:
     tuple val(name), path(acc) from iseq_results_ch
