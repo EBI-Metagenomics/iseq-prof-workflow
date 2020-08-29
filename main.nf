@@ -222,6 +222,7 @@ process hmmscan {
 
 process create_true_false_profiles {
     publishDir params.outputDir, mode:"copy", saveAs: { name -> "${acc}/$name" }
+    clusterOptions '-R "rusage[scratch=5120]"'
 
     input:
     path hmmdb from hmmdb_ch.collect()
