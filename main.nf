@@ -10,6 +10,7 @@ println " "
 
 
 scriptDir = file("$projectDir/script")
+groupRoot = "/horta/$workflow.runName"
 
 Channel
     .fromList(params.domains.tokenize(","))
@@ -17,6 +18,7 @@ Channel
 
 process save_params {
     publishDir params.outputDir, mode:"copy"
+    clusterOptions "-g $groupRoot/save_params"
 
     output:
     path "params.txt"
@@ -31,6 +33,7 @@ process save_params {
 process download_pfam_hmm {
     publishDir params.outputDir, mode:"copy"
     storeDir "$params.storageDir/pfam"
+    clusterOptions "-g $groupRoot/download_pfam_hmm"
 
     output:
     path "db.hmm" into hmmfile_ch
@@ -42,6 +45,8 @@ process download_pfam_hmm {
 }
 
 process download_organism_names {
+    clusterOptions "-g $groupRoot/download_organism_names"
+
     input:
     val domain_spec from domain_specs_ch
 
@@ -58,6 +63,7 @@ process download_organism_names {
 
 process download_genbank_catalog {
     storeDir "$params.storageDir/genbank"
+    clusterOptions "-g $groupRoot/download_genbank_catalog"
 
     input:
     val db from Channel.fromList(["gss", "other"])
@@ -73,6 +79,7 @@ process download_genbank_catalog {
 
 process merge_genbank_catalogs {
     storeDir "$params.storageDir/genbank"
+    clusterOptions "-g $groupRoot/merge_genbank_catalogs"
 
     input:
     path "*" from gb_catalog_ch1.collect()
@@ -89,6 +96,7 @@ process merge_genbank_catalogs {
 process unique_genbank_organisms {
     memory "30 GB"
     storeDir "$params.storageDir/genbank"
+    clusterOptions "-g $groupRoot/unique_genbank_organisms"
 
     input:
     path "gb238.catalog.all.tsv" from gb_catalog_ch2
@@ -105,6 +113,7 @@ process unique_genbank_organisms {
 process sample_accessions {
     errorStrategy "retry"
     maxRetries 2
+    clusterOptions "-g $groupRoot/sample_accessions"
 
     input:
     path "gb238.catalog.tsv" from gb_catalog_ch3
@@ -125,6 +134,8 @@ acc_file_ch
     .into { acc_ch1; acc_ch2 }
 
 process press_hmmfile {
+    clusterOptions "-g $groupRoot/press_hmmfile"
+
     input:
     path hmmfile from hmmfile_ch
 
@@ -143,6 +154,7 @@ process download_genbank_gb {
     maxForks 1
     errorStrategy "retry"
     maxRetries 2
+    clusterOptions "-g $groupRoot/download_genbank_gb"
 
     input:
     val acc from acc_ch1
@@ -162,6 +174,7 @@ process download_genbank_fasta {
     maxForks 1
     errorStrategy "retry"
     maxRetries 2
+    clusterOptions "-g $groupRoot/download_genbank_fasta"
 
     input:
     val acc from acc_ch2
@@ -177,6 +190,7 @@ process download_genbank_fasta {
 
 process extract_cds {
     publishDir params.outputDir, mode:"copy", saveAs: { name -> "${acc}/$name" }
+    clusterOptions "-g $groupRoot/extract_cds"
 
     input:
     tuple val(acc), path(gb) from genbank_gb_ch
@@ -204,7 +218,7 @@ process hmmscan {
     stageInMode "copy"
     scratch true
     memory "8 GB"
-    clusterOptions '-R "rusage[scratch=5120]"'
+    clusterOptions "-g $groupRoot/hmmscan -R 'rusage[scratch=5120]'"
 
     input:
     path hmmdb from hmmdb_ch.collect()
@@ -222,7 +236,7 @@ process hmmscan {
 
 process create_true_false_profiles {
     publishDir params.outputDir, mode:"copy", saveAs: { name -> "${acc}/$name" }
-    clusterOptions '-R "rusage[scratch=5120]"'
+    clusterOptions "-g $groupRoot/create_true_false_profiles -R 'rusage[scratch=5120]'"
 
     input:
     path hmmdb from hmmdb_ch.collect()
@@ -246,13 +260,12 @@ cds_nucl_ch
 
 process iseq_scan {
     publishDir params.outputDir, mode:"copy", saveAs: { name -> "${acc}/chunks/$name" }
-
     errorStrategy "retry"
     maxRetries 2
     stageInMode "copy"
     scratch true
     memory "8 GB"
-    clusterOptions '-R "rusage[scratch=5120]"'
+    clusterOptions "-g $groupRoot/iseq_scan -R 'rusage[scratch=5120]'"
 
     input:
     tuple val(acc), path(nucl), path(dbspace) from cds_nucl_db_split_ch
@@ -294,6 +307,7 @@ iseq_output_ch
 
 process save_output {
     publishDir params.outputDir, mode:"copy", saveAs: { name -> "${acc}/${name}" }, overwrite: true
+    clusterOptions "-g $groupRoot/save_output"
 
     input:
     tuple val(name), path(acc) from iseq_results_ch
