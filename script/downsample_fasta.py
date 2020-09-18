@@ -2,7 +2,7 @@
 
 import sys
 
-from fasta_reader import open_fasta, FASTAWriter
+from fasta_reader import FASTAWriter, open_fasta
 
 infasta = sys.argv[1]
 outfasta = sys.argv[2]

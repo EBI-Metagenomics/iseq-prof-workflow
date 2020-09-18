@@ -2,7 +2,6 @@
 
 import random
 import sys
-import time
 
 from Bio import Entrez, SeqIO
 from Bio.Data import IUPACData
@@ -37,13 +36,13 @@ def get_accession(df, organism: str, family: str):
 
     accession = ""
     for i in index:
-        time.sleep(1.01)
-
         whole_genome = False
         row = df0.loc[i]
         accession = row["Version"]
 
-        with Entrez.esummary(db="nucleotide", id=accession) as handle:
+        with Entrez.esummary(
+            db="nucleotide", id=accession, headers={"User-Agent": "Mozilla/5.0"}
+        ) as handle:
             records = Entrez.parse(handle)
             try:
                 record = next(records)
@@ -58,9 +57,12 @@ def get_accession(df, organism: str, family: str):
         if not whole_genome:
             continue
 
-        time.sleep(1.01)
         with Entrez.efetch(
-            db="nuccore", id=accession, rettype="gb", retmode="text"
+            db="nuccore",
+            id=accession,
+            rettype="gb",
+            retmode="text",
+            headers={"User-Agent": "Mozilla/5.0"},
         ) as handle:
             record = next(SeqIO.parse(handle, "genbank"))
             if taxname[family] not in record.annotations["taxonomy"]:

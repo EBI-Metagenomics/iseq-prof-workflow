@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
-import sys
 import random
+import sys
 from ftplib import FTP, error_perm
 from typing import List
 

@@ -2,9 +2,9 @@
 
 import sys
 from collections import OrderedDict
-from tqdm import tqdm
 
 import pandas as pd
+from tqdm import tqdm
 
 dtype = OrderedDict()
 dtype["Version"] = "str"
