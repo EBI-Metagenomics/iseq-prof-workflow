@@ -94,13 +94,14 @@ family = infile.split(".")[0]
 random.seed(seed)
 
 df = read_csv(catagfile, sep="\t", header=0)
-# The DNA sequence for Porcine circovirus type 2 strain MLP-22 is 1726 base pairs long.
+# The DNA sequence for Porcine circovirus type 2 strain MLP-22 is 1726 base
+# pairs long.
 df = df[df["BasePairs"] >= 1726]
 
 organisms = [r.strip() for r in open(infile, "r").readlines()]
 random.shuffle(organisms)
 
-accessions = []
+accessions = set()
 majors = set()
 for organism in organisms:
     major = get_major(organism)
@@ -108,8 +109,8 @@ for organism in organisms:
         continue
     majors.add(major)
     acc = get_accession(df, organism, family)
-    if len(acc) > 0:
-        accessions.append(acc)
+    if len(acc) > 0 and acc not in accessions:
+        accessions.add(acc)
         print(f"New accession {len(accessions)}: {acc}")
     if len(accessions) == size:
         break
