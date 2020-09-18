@@ -113,6 +113,7 @@ process unique_genbank_organisms {
 process sample_accessions {
     errorStrategy "retry"
     maxRetries 2
+    maxForks 1
     clusterOptions "-g $groupRoot/sample_accessions"
 
     input:
