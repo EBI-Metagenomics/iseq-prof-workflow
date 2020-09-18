@@ -2,6 +2,9 @@
 
 import random
 import sys
+import time
+from typing import Callable
+from urllib.error import HTTPError
 
 from Bio import Entrez, SeqIO
 from Bio.Data import IUPACData
@@ -27,6 +30,54 @@ def is_alphabet_ambiguous(seq):
     return True
 
 
+def is_whole_genome(accession: str) -> bool:
+    whole_genome = False
+
+    with Entrez.esummary(db="nucleotide", id=accession) as handle:
+        records = Entrez.parse(handle)
+        try:
+            record = next(records)
+        except RuntimeError:
+            return whole_genome
+
+        if "whole genome shotgun sequence" in record["Title"]:
+            whole_genome = True
+        if "complete genome" in record["Title"]:
+            whole_genome = True
+
+    return whole_genome
+
+
+def is_nice_data(accession: str, family: str):
+    with Entrez.efetch(
+        db="nuccore",
+        id=accession,
+        rettype="gb",
+        retmode="text",
+    ) as handle:
+        record = next(SeqIO.parse(handle, "genbank"))
+        if taxname[family] not in record.annotations["taxonomy"]:
+            return False
+
+        for feature in record.features:
+            if feature.type.lower() == "cds":
+                if not is_alphabet_ambiguous(feature.extract(record).seq):
+                    return True
+    return False
+
+
+def try_hard(func: Callable[..., bool]) -> bool:
+    tries = 5
+    while True:
+        tries -= 1
+        try:
+            return func()
+        except HTTPError:
+            if tries == 0:
+                raise
+            time.sleep(15)
+
+
 def get_accession(df, organism: str, family: str):
     major = get_major(organism)
     df0 = df.loc[df.Organism.str.startswith(major)]
@@ -36,44 +87,14 @@ def get_accession(df, organism: str, family: str):
 
     accession = ""
     for i in index:
-        whole_genome = False
         row = df0.loc[i]
         accession = row["Version"]
 
-        with Entrez.esummary(
-            db="nucleotide", id=accession, headers={"User-Agent": "Mozilla/5.0"}
-        ) as handle:
-            records = Entrez.parse(handle)
-            try:
-                record = next(records)
-            except RuntimeError:
-                continue
-
-            if "whole genome shotgun sequence" in record["Title"]:
-                whole_genome = True
-            if "complete genome" in record["Title"]:
-                whole_genome = True
-
-        if not whole_genome:
+        if not try_hard(lambda: is_whole_genome(accession)):
             continue
 
-        with Entrez.efetch(
-            db="nuccore",
-            id=accession,
-            rettype="gb",
-            retmode="text",
-            headers={"User-Agent": "Mozilla/5.0"},
-        ) as handle:
-            record = next(SeqIO.parse(handle, "genbank"))
-            if taxname[family] not in record.annotations["taxonomy"]:
-                continue
-
-            for feature in record.features:
-                if feature.type.lower() == "cds":
-                    if not is_alphabet_ambiguous(feature.extract(record).seq):
-                        break
-            else:
-                continue
+        if not try_hard(lambda: is_nice_data(accession, family)):
+            continue
 
         return accession
     return ""
