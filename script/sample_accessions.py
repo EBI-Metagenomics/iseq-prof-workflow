@@ -1,11 +1,12 @@
 #!/usr/bin/env python
 
-import sys
-from pandas import read_csv
 import random
+import sys
 import time
+
 from Bio import Entrez, SeqIO
-from Bio.Alphabet import IUPAC, DNAAlphabet, RNAAlphabet
+from Bio.Data import IUPACData
+from pandas import read_csv
 
 taxname = {"virus": "Viruses", "archaea": "Archaea", "bacteria": "Bacteria"}
 
@@ -16,20 +17,15 @@ def get_major(organism: str):
 
 def is_alphabet_ambiguous(seq):
 
-    if isinstance(seq.alphabet, DNAAlphabet):
-        remains = len(set(str(seq)) - set(IUPAC.unambiguous_dna.letters))
-        if remains > 0:
-            return True
+    remains = len(set(str(seq)) - set(IUPACData.unambiguous_dna_letters))
+    if remains == 0:
+        return False
 
-    elif isinstance(seq.alphabet, RNAAlphabet):
-        remains = len(set(str(seq)) - set(IUPAC.unambiguous_rna.letters))
-        if remains > 0:
-            return True
+    remains = len(set(str(seq)) - set(IUPACData.unambiguous_rna_letters))
+    if remains == 0:
+        return False
 
-    else:
-        raise ValueError("Unkown alphabet.")
-
-    return False
+    return True
 
 
 def get_accession(df, organism: str, family: str):
