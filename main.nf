@@ -131,6 +131,7 @@ process sample_accessions {
 
 acc_file_ch
     .splitText() { it.trim() }
+    .filter ( ~"$params.filterAcc" )
     .into { acc_ch1; acc_ch2 }
 
 process press_hmmfile {
@@ -264,7 +265,7 @@ process iseq_scan {
     maxRetries 2
     stageInMode "copy"
     scratch true
-    memory "8 GB"
+    memory "9 GB"
     clusterOptions "-g $groupRoot/iseq_scan -R 'rusage[scratch=5120]'"
 
     input:
