@@ -51,7 +51,7 @@ process download_organism_names {
     val domain_spec from domain_specs_ch
 
     output:
-    tuple path("${domain}.txt"), val(nsamples) into domain_files_spec_ch
+    tuple val(domain), val(nsamples), path("${domain}.txt") into domain_files_spec_ch
 
     script:
     domain = domain_spec.tokenize(":")[0]
@@ -111,6 +111,7 @@ process unique_genbank_organisms {
 }
 
 process sample_accessions {
+    storeDir "$params.storageDir/genbank"
     errorStrategy "retry"
     maxRetries 2
     maxForks 1
@@ -118,15 +119,14 @@ process sample_accessions {
 
     input:
     path "gb238.catalog.tsv" from gb_catalog_ch3
-    tuple path(domaintxt), val(nsamples) from domain_files_spec_ch
+    tuple val(domain), val(nsamples), path(domaintxt) from domain_files_spec_ch
 
     output:
-    path "accessions" into acc_file_ch
+    path "${domain}_${nsamples}_accessions" into acc_file_ch
 
     script:
-    domain = domaintxt.name.toString().tokenize(".")[0]
     """
-    $scriptDir/sample_accessions.py gb238.catalog.tsv $domaintxt accessions $nsamples $params.seed
+    $scriptDir/sample_accessions.py gb238.catalog.tsv $domaintxt ${domain}_${nsamples}_accessions $nsamples $params.seed
     """
 }
 
