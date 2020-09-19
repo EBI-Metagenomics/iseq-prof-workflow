@@ -3,6 +3,7 @@
 import random
 import sys
 import time
+from http.client import IncompleteRead
 from typing import Callable
 from urllib.error import HTTPError
 
@@ -67,15 +68,15 @@ def is_nice_data(accession: str, family: str):
 
 
 def try_hard(func: Callable[..., bool]) -> bool:
-    tries = 5
+    tries = 7
     while True:
         tries -= 1
         try:
             return func()
-        except HTTPError:
+        except (HTTPError, IncompleteRead) as e:
             if tries == 0:
-                raise
-            time.sleep(15)
+                raise e
+            time.sleep(10)
 
 
 def get_accession(df, organism: str, family: str):
