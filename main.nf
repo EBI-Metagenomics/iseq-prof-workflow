@@ -284,7 +284,7 @@ process iseq_scan {
     iseq pscan3 \$hmmfile $nucl --hit-prefix chunk_${chunk}_item\
         --output output.${chunk}.gff --oamino oamino.${chunk}.fasta\
         --ocodon ocodon.${chunk}.fasta\
-        --no-cut-ga --no-heuristic --quiet
+        --no-cut-ga --quiet
     """
 }
 
