@@ -264,11 +264,11 @@ cds_nucl_ch
 process iseq_scan {
     publishDir params.outputDir, mode:"copy", saveAs: { name -> "${acc}/chunks/$name" }
     errorStrategy "retry"
-    maxRetries 2
+    maxRetries 3
     stageInMode "copy"
     scratch true
-    memory "9 GB"
-    clusterOptions "-g $groupRoot/iseq_scan -R 'rusage[scratch=5120]'"
+    memory { 6.GB * task.attempt }
+    clusterOptions "-g $groupRoot/iseq_scan -R 'rusage[scratch=10240]'"
 
     input:
     tuple val(acc), path(nucl), path(dbspace) from cds_nucl_db_split_ch
