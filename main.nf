@@ -265,7 +265,7 @@ cds_nucl_ch
 process iseq_scan {
     publishDir params.outputDir, mode:"copy", saveAs: { name -> "${acc}/chunks/$name" }
     errorStrategy "retry"
-    maxRetries 3
+    maxRetries 4
     stageInMode "copy"
     scratch true
     memory { 6.GB * task.attempt }
