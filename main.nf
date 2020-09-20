@@ -45,6 +45,7 @@ process download_pfam_hmm {
 }
 
 process download_organism_names {
+    storeDir "$params.storageDir/genbank"
     clusterOptions "-g $groupRoot/download_organism_names"
 
     input:
