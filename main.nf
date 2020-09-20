@@ -137,6 +137,7 @@ acc_file_ch
     .into { acc_ch1; acc_ch2 }
 
 process press_hmmfile {
+    storeDir "$params.storageDir/pfam/press"
     clusterOptions "-g $groupRoot/press_hmmfile"
 
     input:
