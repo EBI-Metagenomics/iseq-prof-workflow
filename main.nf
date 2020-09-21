@@ -269,7 +269,7 @@ process iseq_scan {
     stageInMode "copy"
     scratch true
     memory { 6.GB * task.attempt }
-    clusterOptions "-g $groupRoot/iseq_scan -R 'rusage[scratch=10240]'"
+    clusterOptions "-g $groupRoot/iseq_scan -R 'rusage[scratch=${task.attempt * 5120}]'"
 
     input:
     tuple val(acc), path(nucl), path(dbspace) from cds_nucl_db_split_ch
