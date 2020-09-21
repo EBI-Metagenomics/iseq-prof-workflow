@@ -26,7 +26,7 @@ process save_params {
     script:
     params_cmd = params.all()
     """
-    echo $params_cmd > params.txt
+    echo "$params_cmd" > params.txt
     """
 }
 
