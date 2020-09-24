@@ -12,6 +12,7 @@ from Bio.Data import IUPACData
 from pandas import read_csv
 
 taxname = {"virus": "Viruses", "archaea": "Archaea", "bacteria": "Bacteria"}
+MIN_NUM_CDS = 10
 
 
 def get_major(organism: str):
@@ -50,6 +51,7 @@ def is_whole_genome(accession: str) -> bool:
 
 
 def is_nice_data(accession: str, family: str):
+    num_nice_cds = 0
     with Entrez.efetch(
         db="nuccore",
         id=accession,
@@ -63,6 +65,10 @@ def is_nice_data(accession: str, family: str):
         for feature in record.features:
             if feature.type.lower() == "cds":
                 if not is_alphabet_ambiguous(feature.extract(record).seq):
+                    num_nice_cds += 1
+                # Avoid sequences that are not whole genome,
+                # despite its title
+                if num_nice_cds >= MIN_NUM_CDS:
                     return True
     return False
 
