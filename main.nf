@@ -56,7 +56,7 @@ process filter_pfam_hmm {
 
     script:
     """
-    iseq-prof hmm-filter db.hmm db.hmm.out --by-clan "$params.filterClan"
+    iseq-prof hmm-filter db.hmm db.hmm.out --by-clan "$params.filterClan --no-case-sensitive"
     mv db.hmm.out db.hmm
     """
 }
