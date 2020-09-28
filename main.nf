@@ -56,7 +56,7 @@ process filter_pfam_hmm {
 
     script:
     """
-    iseq-prof hmm-filter db.hmm db.hmm.out --by-clans "$params.filterClan"
+    iseq-prof hmm-filter db.hmm db.hmm.out --by-clan "$params.filterClan"
     mv db.hmm.out db.hmm
     """
 }
