@@ -44,23 +44,6 @@ process download_pfam_hmm {
     """
 }
 
-process filter_pfam_hmm {
-    publishDir params.outputDir, mode:"copy"
-    clusterOptions "-g $groupRoot/filter_pfam_hmm"
-
-    input:
-    path "db.hmm" from hmmfile_pre_filter_ch
-
-    output:
-    path "db.hmm" into hmmfile_ch
-
-    script:
-    """
-    iseq-prof hmm-filter db.hmm db.hmm.out --by-clan "$params.filterClan --no-case-sensitive"
-    mv db.hmm.out db.hmm
-    """
-}
-
 process download_pfam_clans {
     publishDir params.outputDir, mode:"copy"
     storeDir "$params.storageDir/pfam"
@@ -88,6 +71,24 @@ process create_clan_profile_assoc {
     script:
     """
     iseq-prof compute-clans clans.sto.gz clans.csv
+    """
+}
+
+process filter_pfam_hmm {
+    publishDir params.outputDir, mode:"copy"
+    clusterOptions "-g $groupRoot/filter_pfam_hmm"
+
+    input:
+    path "db.hmm" from hmmfile_pre_filter_ch
+    path "clans.csv" from clans_csv_ch
+
+    output:
+    path "db.hmm" into hmmfile_ch
+
+    script:
+    """
+    iseq-prof hmm-filter db.hmm clans.csv db.hmm.out --by-clan "$params.filterClan --no-case-sensitive"
+    mv db.hmm.out db.hmm
     """
 }
 
