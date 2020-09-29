@@ -290,8 +290,8 @@ process hmmscan {
     """
 }
 
-process create_true_false_profiles {
-    clusterOptions "-g $groupRoot/create_true_false_profiles -R 'rusage[scratch=5120]'"
+process create_solution_space {
+    clusterOptions "-g $groupRoot/create_solution_space -R 'rusage[scratch=5120]'"
     publishDir params.outputDir, mode:"copy", saveAs: { name -> "${acc}/$name" }
 
     input:
@@ -303,9 +303,12 @@ process create_true_false_profiles {
 
     script:
     """
-    hmmfile=\$(ls *.hmm)
-    $scriptDir/create_true_false_profiles.py domtblout.txt \$hmmfile accspace.txt dbspace.hmm $params.seed
-    hmmfetch --index dbspace.hmm
+    hmmfile=\$(echo *.hmm)
+    if [ -s $hmmfile ]
+    then
+        $scriptDir/create_solution_space.py domtblout.txt \$hmmfile accspace.txt dbspace.hmm $params.seed
+        hmmfetch --index dbspace.hmm
+    fi
     """
 }
 
@@ -334,11 +337,18 @@ process iseq_scan {
     script:
     chunk = nucl.name.toString().tokenize('.')[-2]
     """
-    hmmfile=\$(ls *.hmm)
-    iseq pscan3 \$hmmfile $nucl --hit-prefix chunk_${chunk}_item\
-        --output output.${chunk}.gff --oamino oamino.${chunk}.fasta\
-        --ocodon ocodon.${chunk}.fasta\
-        --no-cut-ga --quiet
+    hmmfile=\$(echo *.hmm)
+    if [ -s $hmmfile ]
+    then
+        iseq pscan3 \$hmmfile $nucl --hit-prefix chunk_${chunk}_item\
+            --output output.${chunk}.gff --oamino oamino.${chunk}.fasta\
+            --ocodon ocodon.${chunk}.fasta\
+            --no-cut-ga --quiet
+    else
+        echo "##gff-version 3" > output.${chunk}.gff
+        touch amino.${chunk}.fasta
+        touch ocodon.${chunk}.fasta
+    fi
     """
 }
 
