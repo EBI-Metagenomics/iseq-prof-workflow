@@ -78,7 +78,7 @@ process filter_pfam_hmm {
     publishDir "$params.outputDir/pfam", mode:"copy"
 
     input:
-    path "db.hmm" from hmmfile_pre_filter_ch
+    path "db.hmm.in" from hmmfile_pre_filter_ch
     path "clans.csv" from clans_csv_ch
 
     output:
@@ -86,8 +86,7 @@ process filter_pfam_hmm {
 
     script:
     """
-    iseq-prof hmm-filter db.hmm clans.csv db.hmm.out --by-clan "$params.filterClan --no-case-sensitive"
-    mv db.hmm.out db.hmm
+    iseq-prof hmm-filter db.hmm.in clans.csv db.hmm --by-clan "$params.filterClan --no-case-sensitive"
     """
 }
 
