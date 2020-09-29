@@ -286,7 +286,7 @@ process hmmscan {
     script:
     """
     hmmfile=\$(echo *.hmm)
-    if [ -s $hmmfile ]
+    if [ -s \$hmmfile ]
     then
         hmmscan -o /dev/null --noali --cut_ga --domtblout domtblout.txt --cpu ${task.cpus} \$hmmfile $amino
     else
