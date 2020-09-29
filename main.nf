@@ -353,7 +353,7 @@ process iseq_scan {
             --no-cut-ga --quiet
     else
         echo "##gff-version 3" > output.${chunk}.gff
-        touch amino.${chunk}.fasta
+        touch oamino.${chunk}.fasta
         touch ocodon.${chunk}.fasta
     fi
     """
