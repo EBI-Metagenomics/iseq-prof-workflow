@@ -86,7 +86,7 @@ process filter_pfam_hmm {
 
     script:
     """
-    iseq-prof hmm-filter db.hmm.in clans.csv db.hmm --by-clan "$params.filterClan --no-case-sensitive"
+    iseq-prof hmm-filter db.hmm.in clans.csv db.hmm --by-clan "$params.filterClan" --no-case-sensitive
     """
 }
 
