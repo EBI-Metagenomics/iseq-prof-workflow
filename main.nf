@@ -313,6 +313,8 @@ process create_solution_space {
     then
         $scriptDir/create_solution_space.py domtblout.txt \$hmmfile accspace.txt dbspace.hmm $params.seed
         hmmfetch --index dbspace.hmm
+    else
+        touch dbspace.hmm
     fi
     """
 }
