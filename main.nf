@@ -309,7 +309,7 @@ process create_solution_space {
     script:
     """
     hmmfile=\$(echo *.hmm)
-    if [ -s $hmmfile ]
+    if [ -s \$hmmfile ]
     then
         $scriptDir/create_solution_space.py domtblout.txt \$hmmfile accspace.txt dbspace.hmm $params.seed
         hmmfetch --index dbspace.hmm
@@ -343,7 +343,7 @@ process iseq_scan {
     chunk = nucl.name.toString().tokenize('.')[-2]
     """
     hmmfile=\$(echo *.hmm)
-    if [ -s $hmmfile ]
+    if [ -s \$hmmfile ]
     then
         iseq pscan3 \$hmmfile $nucl --hit-prefix chunk_${chunk}_item\
             --output output.${chunk}.gff --oamino oamino.${chunk}.fasta\
