@@ -285,8 +285,13 @@ process hmmscan {
 
     script:
     """
-    hmmfile=\$(ls *.hmm)
-    hmmscan -o /dev/null --noali --cut_ga --domtblout domtblout.txt --cpu ${task.cpus} \$hmmfile $amino
+    hmmfile=\$(echo *.hmm)
+    if [ -s $hmmfile ]
+    then
+        hmmscan -o /dev/null --noali --cut_ga --domtblout domtblout.txt --cpu ${task.cpus} \$hmmfile $amino
+    else
+        touch domtblout.txt
+    fi
     """
 }
 
