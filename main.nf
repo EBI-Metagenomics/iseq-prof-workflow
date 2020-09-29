@@ -198,7 +198,10 @@ process press_hmmfile {
 
     script:
     """
-    hmmpress $hmmfile
+    if [ -s $hmmfile ]
+    then
+        hmmpress $hmmfile
+    fi
     """
 }
 
