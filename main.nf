@@ -7,8 +7,6 @@ println "using profile: $workflow.profile"
 println "using params: $params"
 println " "
 
-
-
 scriptDir = file("$projectDir/script")
 groupRoot = "/horta/$workflow.runName"
 
@@ -31,9 +29,9 @@ process save_params {
 }
 
 process download_pfam_hmm {
+    clusterOptions "-g $groupRoot/download_pfam_hmm"
     publishDir params.outputDir, mode:"copy"
     storeDir "$params.storageDir/pfam"
-    clusterOptions "-g $groupRoot/download_pfam_hmm"
 
     output:
     path "db.hmm" into hmmfile_pre_filter_ch
@@ -45,12 +43,12 @@ process download_pfam_hmm {
 }
 
 process download_pfam_clans {
+    clusterOptions "-g $groupRoot/download_pfam_clans"
     publishDir params.outputDir, mode:"copy"
     storeDir "$params.storageDir/pfam"
-    clusterOptions "-g $groupRoot/download_pfam_clans"
 
     output:
-    path "clans.sto.gz" into clansfile_ch
+    path "clans.sto.gz" into clans_sto_ch
 
     script:
     """
@@ -59,11 +57,12 @@ process download_pfam_clans {
 }
 
 process create_clan_profile_assoc {
-    publishDir params.outputDir, mode:"copy"
     clusterOptions "-g $groupRoot/create_clan_profile_assoc"
+    publishDir params.outputDir, mode:"copy"
+    storeDir "$params.storageDir/pfam"
 
     input:
-    path "clans.sto.gz" from clansfile_ch
+    path "clans.sto.gz" from clans_sto_ch
 
     output:
     path "clans.csv" into clans_csv_ch
@@ -75,8 +74,8 @@ process create_clan_profile_assoc {
 }
 
 process filter_pfam_hmm {
-    publishDir params.outputDir, mode:"copy"
     clusterOptions "-g $groupRoot/filter_pfam_hmm"
+    publishDir "$params.outputDir/pfam", mode:"copy"
 
     input:
     path "db.hmm" from hmmfile_pre_filter_ch
@@ -93,8 +92,8 @@ process filter_pfam_hmm {
 }
 
 process download_organism_names {
-    storeDir "$params.storageDir/genbank"
     clusterOptions "-g $groupRoot/download_organism_names"
+    storeDir "$params.storageDir/genbank"
 
     input:
     val domain_spec from domain_specs_ch
@@ -111,8 +110,8 @@ process download_organism_names {
 }
 
 process download_genbank_catalog {
-    storeDir "$params.storageDir/genbank"
     clusterOptions "-g $groupRoot/download_genbank_catalog"
+    storeDir "$params.storageDir/genbank"
 
     input:
     val db from Channel.fromList(["gss", "other"])
@@ -127,8 +126,8 @@ process download_genbank_catalog {
 }
 
 process merge_genbank_catalogs {
-    storeDir "$params.storageDir/genbank"
     clusterOptions "-g $groupRoot/merge_genbank_catalogs"
+    storeDir "$params.storageDir/genbank"
 
     input:
     path "*" from gb_catalog_ch1.collect()
@@ -143,9 +142,9 @@ process merge_genbank_catalogs {
 }
 
 process unique_genbank_organisms {
+    clusterOptions "-g $groupRoot/unique_genbank_organisms"
     memory "30 GB"
     storeDir "$params.storageDir/genbank"
-    clusterOptions "-g $groupRoot/unique_genbank_organisms"
 
     input:
     path "gb238.catalog.all.tsv" from gb_catalog_ch2
@@ -160,11 +159,11 @@ process unique_genbank_organisms {
 }
 
 process sample_accessions {
-    storeDir "$params.storageDir/genbank"
-    errorStrategy "retry"
-    maxRetries 2
-    maxForks 1
     clusterOptions "-g $groupRoot/sample_accessions"
+    errorStrategy "retry"
+    maxForks 1
+    maxRetries 2
+    storeDir "$params.storageDir/genbank"
 
     input:
     path "gb238.catalog.tsv" from gb_catalog_ch3
@@ -184,9 +183,12 @@ acc_file_ch
     .filter ( ~"$params.filterAcc" )
     .into { acc_ch1; acc_ch2 }
 
+filterClanHash = params.filterClan.digest('SHA-256')
+filterClanHash = filterClanHash[0..3] + filterClanHash[4..7]
+
 process press_hmmfile {
-    storeDir "$params.storageDir/pfam/press"
     clusterOptions "-g $groupRoot/press_hmmfile"
+    storeDir "$params.storageDir/pfam/$filterClanHash/press"
 
     input:
     path hmmfile from hmmfile_ch
@@ -201,12 +203,12 @@ process press_hmmfile {
 }
 
 process download_genbank_gb {
+    clusterOptions "-g $groupRoot/download_genbank_gb"
+    errorStrategy "retry"
+    maxForks 1
+    maxRetries 2
     publishDir params.outputDir, mode:"copy", saveAs: { name -> "${acc}/$name" }
     storeDir "$params.storageDir/genbank"
-    maxForks 1
-    errorStrategy "retry"
-    maxRetries 2
-    clusterOptions "-g $groupRoot/download_genbank_gb"
 
     input:
     val acc from acc_ch1
@@ -221,12 +223,12 @@ process download_genbank_gb {
 }
 
 process download_genbank_fasta {
+    clusterOptions "-g $groupRoot/download_genbank_fasta"
+    errorStrategy "retry"
+    maxForks 1
+    maxRetries 2
     publishDir params.outputDir, mode:"copy", saveAs: { name -> "${acc}/$name" }
     storeDir "$params.storageDir/genbank"
-    maxForks 1
-    errorStrategy "retry"
-    maxRetries 2
-    clusterOptions "-g $groupRoot/download_genbank_fasta"
 
     input:
     val acc from acc_ch2
@@ -241,8 +243,8 @@ process download_genbank_fasta {
 }
 
 process extract_cds {
-    publishDir params.outputDir, mode:"copy", saveAs: { name -> "${acc}/$name" }
     clusterOptions "-g $groupRoot/extract_cds"
+    publishDir params.outputDir, mode:"copy", saveAs: { name -> "${acc}/$name" }
 
     input:
     tuple val(acc), path(gb) from genbank_gb_ch
@@ -265,12 +267,12 @@ process extract_cds {
 }
 
 process hmmscan {
-    publishDir params.outputDir, mode:"copy", saveAs: { name -> "${acc}/$name" }
-    cpus 4
-    stageInMode "copy"
-    scratch true
-    memory "8 GB"
     clusterOptions "-g $groupRoot/hmmscan -R 'rusage[scratch=5120]'"
+    cpus 4
+    memory "8 GB"
+    publishDir params.outputDir, mode:"copy", saveAs: { name -> "${acc}/$name" }
+    scratch true
+    stageInMode "copy"
 
     input:
     path hmmdb from hmmdb_ch.collect()
@@ -287,8 +289,8 @@ process hmmscan {
 }
 
 process create_true_false_profiles {
-    publishDir params.outputDir, mode:"copy", saveAs: { name -> "${acc}/$name" }
     clusterOptions "-g $groupRoot/create_true_false_profiles -R 'rusage[scratch=5120]'"
+    publishDir params.outputDir, mode:"copy", saveAs: { name -> "${acc}/$name" }
 
     input:
     path hmmdb from hmmdb_ch.collect()
@@ -311,13 +313,13 @@ cds_nucl_ch
     .set { cds_nucl_db_split_ch }
 
 process iseq_scan {
-    publishDir params.outputDir, mode:"copy", saveAs: { name -> "${acc}/chunks/$name" }
+    clusterOptions "-g $groupRoot/iseq_scan -R 'rusage[scratch=${task.attempt * 5120}]'"
     errorStrategy "retry"
     maxRetries 4
-    stageInMode "copy"
-    scratch true
     memory { 6.GB * task.attempt }
-    clusterOptions "-g $groupRoot/iseq_scan -R 'rusage[scratch=${task.attempt * 5120}]'"
+    publishDir params.outputDir, mode:"copy", saveAs: { name -> "${acc}/chunks/$name" }
+    scratch true
+    stageInMode "copy"
 
     input:
     tuple val(acc), path(nucl), path(dbspace) from cds_nucl_db_split_ch
@@ -358,8 +360,8 @@ iseq_output_ch
     .set { iseq_results_ch }
 
 process save_output {
-    publishDir params.outputDir, mode:"copy", saveAs: { name -> "${acc}/${name}" }, overwrite: true
     clusterOptions "-g $groupRoot/save_output"
+    publishDir params.outputDir, mode:"copy", saveAs: { name -> "${acc}/${name}" }, overwrite: true
 
     input:
     tuple val(name), path(acc) from iseq_results_ch
