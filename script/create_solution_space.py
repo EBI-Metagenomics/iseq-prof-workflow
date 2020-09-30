@@ -28,7 +28,8 @@ all_accessions = fetch_metadata(hmmdb)["ACC"].tolist()
 remain = list(set(all_accessions) - true_accs)
 
 random.shuffle(remain)
-false_accs = set(remain[i] for i in range(len(true_accs)))
+nfalse = min(len(true_accs), len(remain))
+false_accs = set(remain[i] for i in range(nfalse))
 
 print(f"Saving {keyfile}...")
 with open(keyfile, "w") as file:
