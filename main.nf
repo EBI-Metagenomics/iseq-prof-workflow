@@ -30,7 +30,6 @@ process save_params {
 
 process download_pfam_hmm {
     clusterOptions "-g $groupRoot/download_pfam_hmm"
-    publishDir params.outputDir, mode:"copy"
     storeDir "$params.storageDir/pfam"
 
     output:
@@ -75,7 +74,7 @@ process create_clan_profile_assoc {
 
 process filter_pfam_hmm {
     clusterOptions "-g $groupRoot/filter_pfam_hmm"
-    publishDir "$params.outputDir/pfam", mode:"copy"
+    publishDir params.outputDir, mode:"copy"
 
     input:
     path "db.hmm.in" from hmmfile_pre_filter_ch
