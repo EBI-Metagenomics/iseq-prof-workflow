@@ -74,6 +74,7 @@ process create_clan_profile_assoc {
 
 process filter_pfam_hmm {
     clusterOptions "-g $groupRoot/filter_pfam_hmm"
+    memory "16 GB"
     publishDir params.outputDir, mode:"copy"
 
     input:
