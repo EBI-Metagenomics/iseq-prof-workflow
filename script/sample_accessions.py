@@ -127,6 +127,8 @@ family = infile.split(".")[0]
 random.seed(seed)
 
 df = read_csv(catagfile, sep="\t", header=0)
+if len(df) == 0:
+    raise RuntimeError(f"Empty dataframe. Check {catagfile}.")
 # The DNA sequence for Porcine circovirus type 2 strain MLP-22 is 1726 base
 # pairs long.
 df = df[df["BasePairs"] >= 1726]

@@ -14,3 +14,9 @@ curl -s ftp://ftp.ncbi.nlm.nih.gov/genbank/catalog/gb238.catalog.${db}.txt.gz \
    | grep --invert-match $'\tNoTaxID' \
    | awk -F '\t' '{ if ($3 >= 1726) { print } }' \
    >> $output
+
+if [ -s $ouput ]
+then
+   echo "ERROR: file $output is empty."
+   exit 1
+fi
