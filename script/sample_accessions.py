@@ -70,6 +70,10 @@ def is_nice_data(accession: str, family: str):
                 # despite its title
                 if num_nice_cds >= MIN_NUM_CDS:
                     return True
+    msg = f"Skip {accession} because it "
+    msg += f"has less than {MIN_NUM_CDS} "
+    msg += "unambiguous CDSs ({num_nice_cds})."
+    print(msg)
     return False
 
 
