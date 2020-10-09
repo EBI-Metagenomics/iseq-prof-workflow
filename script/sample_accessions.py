@@ -132,6 +132,7 @@ df = read_csv(catagfile, sep="\t", header=0)
 df = df[df["BasePairs"] >= 1726]
 
 organisms = [r.strip() for r in open(infile, "r").readlines()]
+print(f"Found {len(organisms)} organisms to check.")
 random.shuffle(organisms)
 
 accessions = set()
