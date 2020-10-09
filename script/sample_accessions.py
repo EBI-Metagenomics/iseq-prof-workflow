@@ -40,6 +40,7 @@ def is_whole_genome(accession: str) -> bool:
         try:
             record = next(records)
         except RuntimeError:
+            print(f"ERROR: {accession} is not whole genome.", file=sys.stderr)
             return whole_genome
 
         if "whole genome shotgun sequence" in record["Title"]:
@@ -48,7 +49,7 @@ def is_whole_genome(accession: str) -> bool:
             whole_genome = True
 
     if not whole_genome:
-        print(f"INFO: {accession} is not whole genome.")
+        print(f"WARNING: {accession} is not whole genome.", file=sys.stderr)
     return whole_genome
 
 
@@ -72,10 +73,10 @@ def is_nice_data(accession: str, family: str):
                 # despite its title
                 if num_nice_cds >= MIN_NUM_CDS:
                     return True
-    msg = f"INFO: Skip {accession} because it "
+    msg = f"WARNING: Skip {accession} because it "
     msg += f"has less than {MIN_NUM_CDS} "
     msg += f"unambiguous CDSs ({num_nice_cds})."
-    print(msg)
+    print(msg, file=sys.stderr)
     return False
 
 
