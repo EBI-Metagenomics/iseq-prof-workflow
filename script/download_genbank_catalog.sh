@@ -15,7 +15,7 @@ curl -s ftp://ftp.ncbi.nlm.nih.gov/genbank/catalog/gb238.catalog.${db}.txt.gz \
    | awk -F '\t' '{ if ($3 >= 1726) { print } }' \
    >> $output
 
-if [ -s $ouput ]
+if [ ! -s $ouput ]
 then
    echo "ERROR: file $output is empty."
    exit 1
