@@ -18,7 +18,6 @@ def isdir(ftp, item):
     except error_perm as e:
         if "is not a directory" in e.args[0]:
             return False
-        breakpoint()
         raise e
 
     return True
