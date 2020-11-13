@@ -1,4 +1,6 @@
+report.*
 work/
+output/
 .nextflow*
 
 # Byte-compiled / optimized / DLL files

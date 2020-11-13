@@ -95,7 +95,7 @@ process press_hmmfile {
 process alignment {
     clusterOptions "-g $groupRoot/alignment"
     memory "6 GB"
-    cpus 12
+    cpus "${ Math.min(12, params.maxCPUs as int) }"
     publishDir params.outputDir, mode:"copy"
 
     output:
@@ -103,8 +103,8 @@ process alignment {
 
     script:
     """
-    minimap2 -ax map-ont -t 12 $params.assemblyFile $params.targetsFile > unsorted.sam
-    samtools sort -o alignment.sam --threads 8 --no-PG unsorted.sam
+    minimap2 -ax map-ont -t ${task.cpus} $params.assemblyFile $params.targetsFile > unsorted.sam
+    samtools sort -o alignment.sam --threads ${task.cpus} --no-PG unsorted.sam
     """
 }
 
