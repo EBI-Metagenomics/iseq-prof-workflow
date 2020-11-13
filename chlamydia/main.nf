@@ -77,159 +77,36 @@ process filter_pfam_hmm {
     """
 }
 
-/* process download_organism_names { */
-/*     clusterOptions "-g $groupRoot/download_organism_names" */
-/*     storeDir "$params.storageDir/genbank" */
+process press_hmmfile {
+    clusterOptions "-g $groupRoot/press_hmmfile"
 
-/*     input: */
-/*     val domain_spec from domain_specs_ch */
+    input:
+    path hmmfile from hmmfile_ch
 
-/*     output: */
-/*     tuple val(domain), val(nsamples), path("${domain}.txt") into domain_files_spec_ch */
+    output:
+    path "*.hmm*", includeInputs: true into hmmdb_ch
 
-/*     script: */
-/*     domain = domain_spec.tokenize(":")[0] */
-/*     nsamples = domain_spec.tokenize(":")[1] */
-/*     """ */
-/*     $scriptDir/download_organism_names.py $domain */
-/*     """ */
-/* } */
+    script:
+    """
+    hmmpress $hmmfile
+    """
+}
 
-/* process download_genbank_catalog { */
-/*     clusterOptions "-g $groupRoot/download_genbank_catalog" */
-/*     storeDir "$params.storageDir/genbank" */
+process alignment {
+    clusterOptions "-g $groupRoot/alignment"
+    memory "6 GB"
+    cpus 12
+    publishDir params.outputDir, mode:"copy"
 
-/*     input: */
-/*     val db from Channel.fromList(["gss", "other"]) */
+    output:
+    path "alignment.sam" into alignment_ch
 
-/*     output: */
-/*     path "gb238.catalog.${db}.tsv" into gb_catalog_ch1 */
-
-/*     script: */
-/*     """ */
-/*     $scriptDir/download_genbank_catalog.sh $db gb238.catalog.${db}.tsv */
-/*     """ */
-/* } */
-
-/* process merge_genbank_catalogs { */
-/*     clusterOptions "-g $groupRoot/merge_genbank_catalogs" */
-/*     storeDir "$params.storageDir/genbank" */
-
-/*     input: */
-/*     path "*" from gb_catalog_ch1.collect() */
-
-/*     output: */
-/*     path "gb238.catalog.all.tsv" into gb_catalog_ch2 */
-
-/*     script: */
-/*     """ */
-/*     $scriptDir/merge_genbank_catalog.sh *.tsv gb238.catalog.all.tsv */
-/*     """ */
-/* } */
-
-/* process unique_genbank_organisms { */
-/*     clusterOptions "-g $groupRoot/unique_genbank_organisms" */
-/*     memory "30 GB" */
-/*     storeDir "$params.storageDir/genbank" */
-
-/*     input: */
-/*     path "gb238.catalog.all.tsv" from gb_catalog_ch2 */
-
-/*     output: */
-/*     path "gb238.catalog.tsv" into gb_catalog_ch3 */
-
-/*     script: */
-/*     """ */
-/*     $scriptDir/unique_genbank_catalog.py gb238.catalog.all.tsv gb238.catalog.tsv */
-/*     """ */
-/* } */
-
-/* process sample_accessions { */
-/*     clusterOptions "-g $groupRoot/sample_accessions" */
-/*     errorStrategy "retry" */
-/*     maxForks 1 */
-/*     maxRetries 2 */
-/*     storeDir "$params.storageDir/genbank" */
-
-/*     input: */
-/*     path "gb238.catalog.tsv" from gb_catalog_ch3 */
-/*     tuple val(domain), val(nsamples), path(domaintxt) from domain_files_spec_ch */
-
-/*     output: */
-/*     path "${domain}_${nsamples}_accessions" into acc_file_ch */
-
-/*     script: */
-/*     """ */
-/*     $scriptDir/sample_accessions.py gb238.catalog.tsv $domaintxt ${domain}_${nsamples}_accessions $nsamples $params.seed */
-/*     """ */
-/* } */
-
-/* acc_file_ch */
-/*     .splitText() { it.trim() } */
-/*     .filter ( ~"$params.filterAcc" ) */
-/*     .into { acc_ch1; acc_ch2 } */
-
-/* filterClanHash = params.filterClan.digest('SHA-256') */
-/* filterClanHash = filterClanHash[0..3] + filterClanHash[4..7] */
-
-/* process press_hmmfile { */
-/*     clusterOptions "-g $groupRoot/press_hmmfile" */
-/*     storeDir "$params.storageDir/pfam/$filterClanHash/press" */
-
-/*     input: */
-/*     path hmmfile from hmmfile_ch */
-
-/*     output: */
-/*     path "*.hmm*", includeInputs: true into hmmdb_ch */
-
-/*     script: */
-/*     """ */
-/*     if [ -s $hmmfile ] */
-/*     then */
-/*         hmmpress $hmmfile */
-/*     fi */
-/*     """ */
-/* } */
-
-/* process download_genbank_gb { */
-/*     clusterOptions "-g $groupRoot/download_genbank_gb" */
-/*     errorStrategy "retry" */
-/*     maxForks 1 */
-/*     maxRetries 2 */
-/*     publishDir params.outputDir, mode:"copy", saveAs: { name -> "${acc}/$name" } */
-/*     storeDir "$params.storageDir/genbank" */
-
-/*     input: */
-/*     val acc from acc_ch1 */
-
-/*     output: */
-/*     tuple val(acc), path("${acc}.gb") into genbank_gb_ch */
-
-/*     script: */
-/*     """ */
-/*     $scriptDir/download_genbank.py $acc gb ${acc}.gb */
-/*     """ */
-/* } */
-
-/* process download_genbank_fasta { */
-/*     clusterOptions "-g $groupRoot/download_genbank_fasta" */
-/*     errorStrategy "retry" */
-/*     maxForks 1 */
-/*     maxRetries 2 */
-/*     publishDir params.outputDir, mode:"copy", saveAs: { name -> "${acc}/$name" } */
-/*     storeDir "$params.storageDir/genbank" */
-
-/*     input: */
-/*     val acc from acc_ch2 */
-
-/*     output: */
-/*     tuple val(acc), path("${acc}.fasta") into genbank_fasta_ch */
-
-/*     script: */
-/*     """ */
-/*     $scriptDir/download_genbank.py $acc fasta ${acc}.fasta */
-/*     """ */
-/* } */
+    script:
+    """
+    minimap2 -ax map-ont -t 12 $params.assemblyFile $params.targetsFile > unsorted.sam
+    samtools sort -o alignment.sam --threads 8 unsorted.sam
+    """
+}
 
 /* process extract_cds { */
 /*     clusterOptions "-g $groupRoot/extract_cds" */
