@@ -104,7 +104,7 @@ process alignment {
     script:
     """
     minimap2 -ax map-ont -t 12 $params.assemblyFile $params.targetsFile > unsorted.sam
-    samtools sort -o alignment.sam --threads 8 unsorted.sam
+    samtools sort -o alignment.sam --threads 8 --no-PG unsorted.sam
     """
 }
 
