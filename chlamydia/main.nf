@@ -102,8 +102,10 @@ process alignment {
     path "alignment.sam" into alignment_ch
 
     script:
+    assembly = params.assemblyFile
+    targets = params.targetsFile
     """
-    minimap2 -ax map-ont -t ${task.cpus} $params.assemblyFile $params.targetsFile > unsorted.sam
+    minimap2 -ax map-ont -t ${task.cpus} $assembly $targets | grep --invert-match "^@PG" > unsorted.sam
     samtools sort -o alignment.sam --threads ${task.cpus} --no-PG unsorted.sam
     """
 }
