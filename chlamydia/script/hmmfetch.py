@@ -25,4 +25,4 @@ if naccs != len(accs):
     print(msg, file=sys.stderr)
     sys.exit(1)
 
-print(hmm)
+print(hmm, end="")

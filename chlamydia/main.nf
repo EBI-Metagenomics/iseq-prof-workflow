@@ -79,16 +79,18 @@ process filter_pfam_hmm {
 
 process press_hmmfile {
     clusterOptions "-g $groupRoot/press_hmmfile"
+    publishDir params.outputDir, mode:"copy"
 
     input:
     path hmmfile from hmmfile_ch
 
     output:
-    path "*.hmm*", includeInputs: true into hmmdb_ch
+    path "db.hmm*", includeInputs: true into hmmdb_ch
 
     script:
     """
     hmmpress $hmmfile
+    hmmfetch --index db.hmm
     """
 }
 
@@ -108,9 +110,9 @@ process alignment {
     targets = params.targetsFile
     """
     minimap2 -ax map-ont -t ${task.cpus} $assembly $targets | grep --invert-match "^@PG" > unsorted.sam
-    samtools sort -n -o alignment.sam --threads ${task.cpus} --no-PG unsorted.sam
-    samtools view -q 60 alignment_all.sam > alignment.sam
-    samtools view -b --no-PG alignment.sam > alignment.bam
+    samtools sort -O BAM --no-PG -n --threads ${task.cpus} unsorted.sam > all.bam
+    samtools view -O SAM --no-PG -h -q 60 all.bam > alignment.sam
+    samtools view -O BAM --no-PG alignment.sam > alignment.bam
     samtools fasta alignment.bam > alignment.fasta
     """
 }
@@ -121,16 +123,16 @@ alignment_fasta_ch
 
 process iseq_scan {
     clusterOptions "-g $groupRoot/iseq_scan -R 'rusage[scratch=${task.attempt * 5120}]'"
-    errorStrategy "retry"
-    maxRetries 4
-    memory { 6.GB * task.attempt }
+    /* errorStrategy "retry" */
+    /* maxRetries 4 */
+    /* memory { 6.GB * task.attempt } */
     publishDir params.outputDir, mode:"copy", saveAs: { name -> "chunks/$name" }
-    scratch true
-    stageInMode "copy"
+    /* scratch true */
+    /* stageInMode "copy" */
 
     input:
     path targets from targets_split_ch
-    from "db.hmm*" from hmmdb_ch
+    path hmmdb from hmmdb_ch.collect()
 
     output:
     path("output.*.gff") into iseq_output_split_ch
@@ -140,7 +142,7 @@ process iseq_scan {
     script:
     chunk = targets.name.toString().tokenize('.')[-2]
     """
-    iseq pscan3 db.hmm $nucl --hit-prefix chunk_${chunk}_item\
+    iseq pscan3 db.hmm $targets --hit-prefix chunk_${chunk}_item\
         --output output.${chunk}.gff --oamino oamino.${chunk}.fasta\
         --ocodon ocodon.${chunk}.fasta\
         --no-cut-ga --quiet
