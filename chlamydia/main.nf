@@ -99,40 +99,53 @@ process alignment {
     publishDir params.outputDir, mode:"copy"
 
     output:
-    path "alignment.sam" into alignment_ch
+    path "alignment.sam" into alignment_sam_ch
+    path "alignment.bam" into alignment_bam_ch
+    path "alignment.fasta" into alignment_fasta_ch
 
     script:
     assembly = params.assemblyFile
     targets = params.targetsFile
     """
     minimap2 -ax map-ont -t ${task.cpus} $assembly $targets | grep --invert-match "^@PG" > unsorted.sam
-    samtools sort -o alignment.sam --threads ${task.cpus} --no-PG unsorted.sam
+    samtools sort -n -o alignment.sam --threads ${task.cpus} --no-PG unsorted.sam
+    samtools view -q 60 alignment_all.sam > alignment.sam
+    samtools view -b --no-PG alignment.sam > alignment.bam
+    samtools fasta alignment.bam > alignment.fasta
     """
 }
 
-/* process extract_cds { */
-/*     clusterOptions "-g $groupRoot/extract_cds" */
-/*     publishDir params.outputDir, mode:"copy", saveAs: { name -> "${acc}/$name" } */
+alignment_fasta_ch
+    .splitFasta(by:params.chunkSize, file:true)
+    .set { targets_split_ch }
 
-/*     input: */
-/*     tuple val(acc), path(gb) from genbank_gb_ch */
+process iseq_scan {
+    clusterOptions "-g $groupRoot/iseq_scan -R 'rusage[scratch=${task.attempt * 5120}]'"
+    errorStrategy "retry"
+    maxRetries 4
+    memory { 6.GB * task.attempt }
+    publishDir params.outputDir, mode:"copy", saveAs: { name -> "chunks/$name" }
+    scratch true
+    stageInMode "copy"
 
-/*     output: */
-/*     tuple val(acc), path("cds_amino.fasta") into cds_amino_ch */
-/*     tuple val(acc), path("cds_nucl.fasta") into cds_nucl_ch */
+    input:
+    path targets from targets_split_ch
+    from "db.hmm*" from hmmdb_ch
 
-/*     script: */
-/*     """ */
-/*     $scriptDir/extract_cds.py $gb cds_amino.fasta cds_nucl.fasta */
-/*     if [[ "$params.downsampleCDS" != "0" ]]; */
-/*     then */
-/*        $scriptDir/downsample_fasta.py cds_amino.fasta .cds_amino.fasta $params.downsampleCDS */
-/*        mv .cds_amino.fasta cds_amino.fasta */
-/*        $scriptDir/downsample_fasta.py cds_nucl.fasta .cds_nucl.fasta $params.downsampleCDS */
-/*        mv .cds_nucl.fasta cds_nucl.fasta */
-/*     fi */
-/*     """ */
-/* } */
+    output:
+    path("output.*.gff") into iseq_output_split_ch
+    path("oamino.*.fasta") into iseq_oamino_split_ch
+    path("ocodon.*.fasta") into iseq_ocodon_split_ch
+
+    script:
+    chunk = targets.name.toString().tokenize('.')[-2]
+    """
+    iseq pscan3 db.hmm $nucl --hit-prefix chunk_${chunk}_item\
+        --output output.${chunk}.gff --oamino oamino.${chunk}.fasta\
+        --ocodon ocodon.${chunk}.fasta\
+        --no-cut-ga --quiet
+    """
+}
 
 /* process hmmscan { */
 /*     clusterOptions "-g $groupRoot/hmmscan -R 'rusage[scratch=5120]'" */
@@ -193,40 +206,6 @@ process alignment {
 /*     .splitFasta(by:params.chunkSize, file:true, elem:1) */
 /*     .set { cds_nucl_db_split_ch } */
 
-/* process iseq_scan { */
-/*     clusterOptions "-g $groupRoot/iseq_scan -R 'rusage[scratch=${task.attempt * 5120}]'" */
-/*     errorStrategy "retry" */
-/*     maxRetries 4 */
-/*     memory { 6.GB * task.attempt } */
-/*     publishDir params.outputDir, mode:"copy", saveAs: { name -> "${acc}/chunks/$name" } */
-/*     scratch true */
-/*     stageInMode "copy" */
-
-/*     input: */
-/*     tuple val(acc), path(nucl), path(dbspace) from cds_nucl_db_split_ch */
-
-/*     output: */
-/*     tuple val(acc), path("output.*.gff") into iseq_output_split_ch */
-/*     tuple val(acc), path("oamino.*.fasta") into iseq_oamino_split_ch */
-/*     tuple val(acc), path("ocodon.*.fasta") into iseq_ocodon_split_ch */
-
-/*     script: */
-/*     chunk = nucl.name.toString().tokenize('.')[-2] */
-/*     """ */
-/*     hmmfile=\$(echo *.hmm) */
-/*     if [ -s \$hmmfile ] */
-/*     then */
-/*         iseq pscan3 \$hmmfile $nucl --hit-prefix chunk_${chunk}_item\ */
-/*             --output output.${chunk}.gff --oamino oamino.${chunk}.fasta\ */
-/*             --ocodon ocodon.${chunk}.fasta\ */
-/*             --no-cut-ga --quiet */
-/*     else */
-/*         echo "##gff-version 3" > output.${chunk}.gff */
-/*         touch oamino.${chunk}.fasta */
-/*         touch ocodon.${chunk}.fasta */
-/*     fi */
-/*     """ */
-/* } */
 
 /* iseq_output_split_ch */
 /*     .collectFile(keepHeader:true, skip:1) */
