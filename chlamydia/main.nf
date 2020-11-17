@@ -125,7 +125,7 @@ process iseq_scan {
     clusterOptions "-g $groupRoot/iseq_scan -R 'rusage[scratch=${task.attempt * 5120}]'"
     /* errorStrategy "retry" */
     /* maxRetries 4 */
-    /* memory { 6.GB * task.attempt } */
+    memory { 6.GB * task.attempt }
     publishDir params.outputDir, mode:"copy", saveAs: { name -> "chunks/$name" }
     /* scratch true */
     /* stageInMode "copy" */
@@ -146,6 +146,38 @@ process iseq_scan {
         --output output.${chunk}.gff --oamino oamino.${chunk}.fasta\
         --ocodon ocodon.${chunk}.fasta\
         --no-cut-ga --quiet
+    """
+}
+
+iseq_output_split_ch
+    .collectFile(name: "output.gff", skip:1)
+    .set { iseq_output_ch }
+
+
+iseq_oamino_split_ch
+    .collectFile(name: "oamino.fasta")
+    .set { iseq_oamino_ch }
+
+iseq_ocodon_split_ch
+    .collectFile(name: "ocodon.fasta")
+    .set { iseq_ocodon_ch }
+
+iseq_output_ch
+    .mix(iseq_oamino_ch, iseq_ocodon_ch)
+    .set { iseq_results_ch }
+
+process save_output {
+    clusterOptions "-g $groupRoot/save_output"
+    publishDir params.outputDir, mode:"copy", overwrite: true
+
+    input:
+    path result from iseq_results_ch
+
+    output:
+    path result, includeInputs: true
+
+    script:
+    """
     """
 }
 
@@ -227,19 +259,3 @@ process iseq_scan {
 /* iseq_output_ch */
 /*     .mix(iseq_oamino_ch, iseq_ocodon_ch) */
 /*     .set { iseq_results_ch } */
-
-/* process save_output { */
-/*     clusterOptions "-g $groupRoot/save_output" */
-/*     publishDir params.outputDir, mode:"copy", saveAs: { name -> "${acc}/${name}" }, overwrite: true */
-
-/*     input: */
-/*     tuple val(name), path(acc) from iseq_results_ch */
-
-/*     output: */
-/*     path(name) */
-
-/*     script: */
-/*     """ */
-/*     mv $acc $name */
-/*     """ */
-/* } */

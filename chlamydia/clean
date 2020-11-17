@@ -1,0 +1,3 @@
+#!/bin/bash
+
+rm -rf .nextflow/ work/ output/ report.* .nextflow.log*
