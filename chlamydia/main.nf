@@ -11,6 +11,8 @@ scriptDir = file("$projectDir/script")
 groupRoot = "/horta/$workflow.runName"
 profAccsFile = file("$projectDir/profile_accessions.txt")
 
+assembly_ch = Channel.fromPath(params.assemblyFile).collect()
+
 process save_params {
     publishDir params.outputDir, mode:"copy"
     clusterOptions "-g $groupRoot/save_params"
@@ -94,11 +96,35 @@ process press_hmmfile {
     """
 }
 
+process prokka_assembly {
+    clusterOptions "-g $groupRoot/prokka_assembly -R 'rusage[scratch=5120]'"
+    cpus "${ Math.min(2, params.maxCPUs as int) }"
+    memory "8 GB"
+    publishDir params.outputDir, mode:"copy", saveAs: { name -> "$name" }
+    /* scratch true */
+    /* stageInMode "copy" */
+
+    input:
+    path hmmdb from hmmdb_ch.collect()
+    path assembly from assembly_ch
+
+    output:
+    path "prokka/*" into assembly_prokka_ch
+
+    script:
+    """
+    prokka --outdir prokka --prefix assembly --cpus ${task.cpus} $assembly
+    """
+}
+
 process alignment {
     clusterOptions "-g $groupRoot/alignment"
     memory "6 GB"
     cpus "${ Math.min(12, params.maxCPUs as int) }"
     publishDir params.outputDir, mode:"copy"
+
+    input:
+    path assembly from assembly_ch
 
     output:
     path "alignment.sam" into alignment_sam_ch
@@ -106,7 +132,6 @@ process alignment {
     path "alignment.fasta" into alignment_fasta_ch
 
     script:
-    assembly = params.assemblyFile
     targets = params.targetsFile
     """
     minimap2 -ax map-ont -t ${task.cpus} $assembly $targets | grep --invert-match "^@PG" > unsorted.sam
