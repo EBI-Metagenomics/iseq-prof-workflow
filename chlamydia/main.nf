@@ -91,32 +91,49 @@ process pfam_metafile {
 }
 
 process prokka_assembly {
-    clusterOptions "-g $groupRoot/prokka_assembly -R 'rusage[scratch=5120]'"
+    clusterOptions "-g $groupRoot/prokka_assembly"
     cpus "${ Math.min(2, params.maxCPUs as int) }"
     memory "8 GB"
-    publishDir params.outputDir, mode:"copy", saveAs: { name -> "$name" }
-    /* scratch true */
-    /* stageInMode "copy" */
+    publishDir params.outputDir, mode:"copy", saveAs: { name -> "prokka/$name" }
+    storeDir "$params.storageDir/prokka"
 
     input:
     path assembly from assembly_ch
 
     output:
-    path "prokka/*" into assembly_prokka_ch
-    path "assembly.gff" into
+    path "assembly.err" into assembly_err_ch
+    path "assembly.ffn" into assembly_ffn_ch
+    path "assembly.fsa" into assembly_fsa_ch
+    path "assembly.gff" into assembly_gff_ch
+    path "assembly.sqn" into assembly_sqn_ch
+    path "assembly.tsv" into assembly_tsv_ch
+    path "assembly.faa" into assembly_faa_ch
+    path "assembly.fna" into assembly_fna_ch
+    path "assembly.gbk" into assembly_gbk_ch
+    path "assembly.log" into assembly_log_ch
+    path "assembly.tbl" into assembly_tbl_ch
+    path "assembly.txt" into assembly_txt_ch
 
     script:
     """
-    prokka --outdir prokka --prefix assembly --cpus ${task.cpus} $assembly
+    prokka --outdir . --force --prefix assembly --cpus ${task.cpus} $assembly
     """
 }
 
 process uniprotkb_accessions {
+    clusterOptions "-g $groupRoot/uniprotkb_accessions"
+    memory "8 GB"
+    publishDir params.outputDir, mode:"copy", saveAs: { name -> "$name" }
+
+    input:
+    path assembly_gff from assembly_gff_ch
+
+    output:
+    path "uniprotkb_accessions.txt" into uniprotkb_accessions_ch
 
     script:
     """
     #!/usr/bin/env python
-
     import re
 
     from gff_io import read_gff
@@ -124,8 +141,14 @@ process uniprotkb_accessions {
     uniprotkb_accs = set()
     pattern = re.compile(".*UniProtKB:([^:,]+)")
 
-    for gff in read_gff(prokka_gff):
-        m = re.match(pattern, gff.attributes_asdict()["inference"])
+    for gff in read_gff("${assembly_gff}"):
+        atts = gff.attributes_asdict()
+
+        inference = atts.get("inference", None)
+        if inference is None:
+            continue
+
+        m = re.match(pattern, inference)
         if m is None:
             continue
 
@@ -134,7 +157,7 @@ process uniprotkb_accessions {
 
     with open("uniprotkb_accessions.txt", "w") as file:
         for acc in uniprotkb_accs:
-            file.write(acc + "\n")
+            file.write(acc + "\\n")
     """
 }
 
