@@ -1,6 +1,6 @@
 #!/bin/bash
 
-DIR=/Volumes/ebi/chlamydia
+DIR=/Users/horta/ebi/chlamydia
 
 nextflow main.nf --maxCPUs 2 \
   --targetsFile "$DIR/14-2711_R47_1k.fastq" \
