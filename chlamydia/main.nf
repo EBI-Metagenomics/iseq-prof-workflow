@@ -9,7 +9,6 @@ println " "
 
 scriptDir = file("$projectDir/script")
 groupRoot = "/horta/$workflow.runName"
-/* profAccsFile = file("$projectDir/profile_accessions.txt") */
 
 assembly_ch = Channel.fromPath(params.assemblyFile).collect()
 
@@ -40,7 +39,6 @@ process download_pfam_hmm {
     """
 }
 
-/* Pfam-A.hmm  Pfam-A.hmm.h3f  Pfam-A.hmm.h3i  Pfam-A.hmm.h3m  Pfam-A.hmm.h3m.ssi  Pfam-A.hmm.h3p */
 process press_pfam_hmmfile {
     clusterOptions "-g $groupRoot/press_pfam_hmmfile"
     storeDir "$params.storageDir/pfam"
@@ -95,7 +93,7 @@ process prokka_assembly {
     cpus "${ Math.min(2, params.maxCPUs as int) }"
     memory "8 GB"
     publishDir params.outputDir, mode:"copy", saveAs: { name -> "prokka/$name" }
-    storeDir "$params.storageDir/prokka"
+    /* storeDir "$params.storageDir/prokka" */
 
     input:
     path assembly from assembly_ch
@@ -161,6 +159,84 @@ process uniprotkb_accessions {
     """
 }
 
+process hmmscan_assembly {
+    clusterOptions "-g $groupRoot/hmmscan_assembly -R 'rusage[scratch=5120]'"
+    cpus "${ Math.min(4, params.maxCPUs as int) }"
+    memory "8 GB"
+    publishDir params.outputDir, mode:"copy", saveAs: { name -> "$name" }
+    /* scratch true */
+    /* stageInMode "copy" */
+
+    input:
+    path pfam_hmmfile from pfam_hmmfile_ch
+    path pfam_hmm3f from pfam_hmm3f_ch
+    path pfam_hmm3i from pfam_hmm3i_ch
+    path pfam_hmm3m from pfam_hmm3m_ch
+    path pfam_hmm3p from pfam_hmm3p_ch
+    path assembly_faa from assembly_faa_ch
+
+    output:
+    path "assembly_domtblout.txt" into assembly_domtblout_ch
+
+    script:
+    """
+    hmmscan -o /dev/null --noali --cut_ga --domtblout assembly_domtblout.txt \
+        --cpu ${task.cpus} $pfam_hmmfile $assembly_faa
+    """
+}
+
+process create_hmmdb_solution_space {
+    clusterOptions "-g $groupRoot/create_hmmdb_solution_space -R 'rusage[scratch=5120]'"
+    publishDir params.outputDir, mode:"copy", saveAs: { name -> "$name" }
+
+    input:
+    path pfam_hmmfile from pfam_hmmfile_ch
+    path assembly_domtblout from assembly_domtblout_ch
+
+    output:
+    path "db.hmm" into db_hmmfile_ch
+    path "db.hmm.h3f" into db_hmm3f_ch
+    path "db.hmm.h3i" into db_hmm3i_ch
+    path "db.hmm.h3m" into db_hmm3m_ch
+    path "db.hmm.h3p" into db_hmm3p_ch
+    path "db.hmm.h3m.ssi" into db_hmm_ssi_ch
+
+    script:
+    """
+    $scriptDir/create_hmmdb_solution_space.py $assembly_domtblout $pfam_hmmfile db.hmm $params.seed
+    hmmpress db.hmm
+    hmmfetch --index db.hmm
+    """
+}
+
+/* process iseq_scan_assembly { */
+/*     clusterOptions "-g $groupRoot/iseq_scan_assembly -R 'rusage[scratch=${task.attempt * 5120}]'" */
+/*     /1* errorStrategy "retry" *1/ */
+/*     /1* maxRetries 4 *1/ */
+/*     /1* memory { 6.GB * task.attempt } *1/ */
+/*     publishDir params.outputDir, mode:"copy", saveAs: { name -> "chunks/$name" } */
+/*     /1* scratch true *1/ */
+/*     /1* stageInMode "copy" *1/ */
+
+/*     input: */
+/*     path targets from targets_split_ch */
+/*     path hmmdb from hmmdb_ch.collect() */
+
+/*     output: */
+/*     path("output.*.gff") into iseq_output_split_ch */
+/*     path("oamino.*.fasta") into iseq_oamino_split_ch */
+/*     path("ocodon.*.fasta") into iseq_ocodon_split_ch */
+
+/*     script: */
+/*     chunk = targets.name.toString().tokenize('.')[-2] */
+/*     """ */
+/*     iseq pscan3 db.hmm $targets --hit-prefix chunk_${chunk}_item\ */
+/*         --output output.${chunk}.gff --oamino oamino.${chunk}.fasta\ */
+/*         --ocodon ocodon.${chunk}.fasta\ */
+/*         --no-cut-ga --quiet */
+/*     """ */
+/* } */
+
 /* process alignment { */
 /*     clusterOptions "-g $groupRoot/alignment" */
 /*     memory "6 GB" */
@@ -211,7 +287,7 @@ process uniprotkb_accessions {
 /*     script: */
 /*     chunk = targets.name.toString().tokenize('.')[-2] */
 /*     """ */
-/*     iseq pscan3 db.hmm $targets --hit-prefix chunk_${chunk}_item\ */
+/*     iseq psc \an3 db.hmm $targets --hit-prefix chunk_${chunk}_item\ */
 /*         --output output.${chunk}.gff --oamino oamino.${chunk}.fasta\ */
 /*         --ocodon ocodon.${chunk}.fasta\ */
 /*         --no-cut-ga --quiet */
@@ -247,33 +323,6 @@ process uniprotkb_accessions {
 
 /*     script: */
 /*     """ */
-/*     """ */
-/* } */
-
-/* process hmmscan { */
-/*     clusterOptions "-g $groupRoot/hmmscan -R 'rusage[scratch=5120]'" */
-/*     cpus 4 */
-/*     memory "8 GB" */
-/*     publishDir params.outputDir, mode:"copy", saveAs: { name -> "${acc}/$name" } */
-/*     scratch true */
-/*     stageInMode "copy" */
-
-/*     input: */
-/*     path hmmdb from hmmdb_ch.collect() */
-/*     tuple val(acc), path(amino) from cds_amino_ch */
-
-/*     output: */
-/*     tuple val(acc), path("domtblout.txt") into hmmscan_output_ch */
-
-/*     script: */
-/*     """ */
-/*     hmmfile=\$(echo *.hmm) */
-/*     if [ -s \$hmmfile ] */
-/*     then */
-/*         hmmscan -o /dev/null --noali --cut_ga --domtblout domtblout.txt --cpu ${task.cpus} \$hmmfile $amino */
-/*     else */
-/*         touch domtblout.txt */
-/*     fi */
 /*     """ */
 /* } */
 
