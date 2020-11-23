@@ -1,8 +1,11 @@
 #!/bin/bash
 
 DIR=/Users/horta/ebi/chlamydia
+EPS=$1
 
 nextflow main.nf --maxCPUs 2 \
-  --assemblyFile "$DIR/small/14-2711_unicycler.fasta" \
+  --outputDir "/Users/horta/ebi/chlamydia/output$EPS" \
+  --iseqEpsilon $EPS \
+  --assemblyFile "$DIR/14-2711_unicycler_depth49.fasta" \
   --targetsFile "$DIR/14-2711_R47_1k.fastq" \
   --chunkSize 100 $@
