@@ -3,5 +3,6 @@
 DIR=/Users/horta/ebi/chlamydia
 
 nextflow main.nf --maxCPUs 2 \
+  --assemblyFile "$DIR/small/14-2711_unicycler.fasta" \
   --targetsFile "$DIR/14-2711_R47_1k.fastq" \
   --chunkSize 100 $@
