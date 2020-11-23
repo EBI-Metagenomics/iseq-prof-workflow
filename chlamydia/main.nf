@@ -51,7 +51,7 @@ process press_pfam_hmmfile {
     path "${hmmfile}.h3i" into pfam_hmm3i_ch
     path "${hmmfile}.h3m" into pfam_hmm3m_ch
     path "${hmmfile}.h3p" into pfam_hmm3p_ch
-    path "${hmmfile}.h3m.ssi" into pfam_hmm_ssi_ch
+    path "${hmmfile}.h3m.ssi" into pfam_hmmssi_ch
 
     script:
     """
@@ -59,13 +59,6 @@ process press_pfam_hmmfile {
     hmmfetch --index $hmmfile
     """
 }
-
-pfam_hmmfile_ch.combine(pfam_hmm3f_ch)
-               .combine(pfam_hmm3i_ch)
-               .combine(pfam_hmm3m_ch)
-               .combine(pfam_hmm3p_ch)
-               .combine(pfam_hmm_ssi_ch)
-               .set { pfam_hmmdb_ch }
 
 process pfam_metafile {
     clusterOptions "-g $groupRoot/pfam_metafile"
@@ -163,7 +156,7 @@ process hmmscan_assembly {
     clusterOptions "-g $groupRoot/hmmscan_assembly -R 'rusage[scratch=5120]'"
     cpus "${ Math.min(4, params.maxCPUs as int) }"
     memory "8 GB"
-    publishDir params.outputDir, mode:"copy", saveAs: { name -> "$name" }
+    publishDir params.outputDir, mode:"copy", saveAs: { name -> "assembly/$name" }
     /* scratch true */
     /* stageInMode "copy" */
 
@@ -173,15 +166,46 @@ process hmmscan_assembly {
     path pfam_hmm3i from pfam_hmm3i_ch
     path pfam_hmm3m from pfam_hmm3m_ch
     path pfam_hmm3p from pfam_hmm3p_ch
+    path pfam_hmmssi from pfam_hmmssi_ch
     path assembly_faa from assembly_faa_ch
 
     output:
-    path "assembly_domtblout.txt" into assembly_domtblout_ch
+    path "domtblout.txt" into assembly_domtblout_ch
 
     script:
     """
-    hmmscan -o /dev/null --noali --cut_ga --domtblout assembly_domtblout.txt \
+    hmmscan -o /dev/null --noali --cut_ga --domtblout domtblout.txt \
         --cpu ${task.cpus} $pfam_hmmfile $assembly_faa
+    """
+}
+
+process iseq_scan_assembly {
+    clusterOptions "-g $groupRoot/iseq_scan_assembly -R 'rusage[scratch=5120]'"
+    memory "8 GB"
+    publishDir params.outputDir, mode:"copy", saveAs: { name -> "assembly/$name" }
+    /* scratch true */
+    /* stageInMode "copy" */
+
+    input:
+    path pfam_hmmfile from pfam_hmmfile_ch
+    path pfam_hmm3f from pfam_hmm3f_ch
+    path pfam_hmm3i from pfam_hmm3i_ch
+    path pfam_hmm3m from pfam_hmm3m_ch
+    path pfam_hmm3p from pfam_hmm3p_ch
+    path pfam_hmmssi from pfam_hmmssi_ch
+    path assembly from assembly_ch
+
+    output:
+    path "output.gff" into assembly_iseq_output_ch
+    path "oamino.fasta" into assembly_iseq_oamino_ch
+    path "ocodon.fasta" into assembly_iseq_ocodon_ch
+
+    script:
+    """
+    iseq pscan3 $pfam_hmmfile $assembly --hit-prefix item\
+        --output output.gff --oamino oamino.fasta\
+        --ocodon ocodon.fasta\
+        --no-cut-ga --quiet --epsilon $params.iseqEpsilon
     """
 }
 
