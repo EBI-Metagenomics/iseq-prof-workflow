@@ -111,47 +111,6 @@ process prokka_assembly {
     """
 }
 
-process uniprotkb_accessions {
-    clusterOptions "-g $groupRoot/uniprotkb_accessions"
-    memory "8 GB"
-    publishDir params.outputDir, mode:"copy", saveAs: { name -> "$name" }
-
-    input:
-    path assembly_gff from assembly_gff_ch
-
-    output:
-    path "uniprotkb_accessions.txt" into uniprotkb_accessions_ch
-
-    script:
-    """
-    #!/usr/bin/env python
-    import re
-
-    from gff_io import read_gff
-
-    uniprotkb_accs = set()
-    pattern = re.compile(".*UniProtKB:([^:,]+)")
-
-    for gff in read_gff("${assembly_gff}"):
-        atts = gff.attributes_asdict()
-
-        inference = atts.get("inference", None)
-        if inference is None:
-            continue
-
-        m = re.match(pattern, inference)
-        if m is None:
-            continue
-
-        assert len(m.groups()) == 1
-        uniprotkb_accs.add(m.groups()[0])
-
-    with open("uniprotkb_accessions.txt", "w") as file:
-        for acc in uniprotkb_accs:
-            file.write(acc + "\\n")
-    """
-}
-
 process hmmscan_assembly {
     clusterOptions "-g $groupRoot/hmmscan_assembly -R 'rusage[scratch=5120]'"
     cpus "${ Math.min(4, params.maxCPUs as int) }"
@@ -179,12 +138,39 @@ process hmmscan_assembly {
     """
 }
 
-process iseq_scan_assembly {
-    clusterOptions "-g $groupRoot/iseq_scan_assembly -R 'rusage[scratch=5120]'"
-    memory "8 GB"
-    publishDir params.outputDir, mode:"copy", saveAs: { name -> "assembly/$name" }
-    /* scratch true */
-    /* stageInMode "copy" */
+/* process iseq_scan_assembly { */
+/*     clusterOptions "-g $groupRoot/iseq_scan_assembly -R 'rusage[scratch=5120]'" */
+/*     memory "8 GB" */
+/*     publishDir params.outputDir, mode:"copy", saveAs: { name -> "assembly/$name" } */
+/*     /1* scratch true *1/ */
+/*     /1* stageInMode "copy" *1/ */
+
+/*     input: */
+/*     path pfam_hmmfile from pfam_hmmfile_ch */
+/*     path pfam_hmm3f from pfam_hmm3f_ch */
+/*     path pfam_hmm3i from pfam_hmm3i_ch */
+/*     path pfam_hmm3m from pfam_hmm3m_ch */
+/*     path pfam_hmm3p from pfam_hmm3p_ch */
+/*     path pfam_hmmssi from pfam_hmmssi_ch */
+/*     path assembly from assembly_ch */
+
+/*     output: */
+/*     path "output.gff" into assembly_iseq_output_ch */
+/*     path "oamino.fasta" into assembly_iseq_oamino_ch */
+/*     path "ocodon.fasta" into assembly_iseq_ocodon_ch */
+
+/*     script: */
+/*     """ */
+/*     iseq pscan3 $pfam_hmmfile $assembly --hit-prefix item\ */
+/*         --output output.gff --oamino oamino.fasta\ */
+/*         --ocodon ocodon.fasta\ */
+/*         --no-cut-ga --quiet --epsilon $params.iseqEpsilon */
+/*     """ */
+/* } */
+
+process create_hmmdb_solution_space {
+    clusterOptions "-g $groupRoot/create_hmmdb_solution_space -R 'rusage[scratch=5120]'"
+    publishDir params.outputDir, mode:"copy", saveAs: { name -> "$name" }
 
     input:
     path pfam_hmmfile from pfam_hmmfile_ch
@@ -193,43 +179,56 @@ process iseq_scan_assembly {
     path pfam_hmm3m from pfam_hmm3m_ch
     path pfam_hmm3p from pfam_hmm3p_ch
     path pfam_hmmssi from pfam_hmmssi_ch
-    path assembly from assembly_ch
-
-    output:
-    path "output.gff" into assembly_iseq_output_ch
-    path "oamino.fasta" into assembly_iseq_oamino_ch
-    path "ocodon.fasta" into assembly_iseq_ocodon_ch
-
-    script:
-    """
-    iseq pscan3 $pfam_hmmfile $assembly --hit-prefix item\
-        --output output.gff --oamino oamino.fasta\
-        --ocodon ocodon.fasta\
-        --no-cut-ga --quiet --epsilon $params.iseqEpsilon
-    """
-}
-
-process create_hmmdb_solution_space {
-    clusterOptions "-g $groupRoot/create_hmmdb_solution_space -R 'rusage[scratch=5120]'"
-    publishDir params.outputDir, mode:"copy", saveAs: { name -> "$name" }
-
-    input:
-    path pfam_hmmfile from pfam_hmmfile_ch
     path assembly_domtblout from assembly_domtblout_ch
 
     output:
     path "db.hmm" into db_hmmfile_ch
-    path "db.hmm.h3f" into db_hmm3f_ch
-    path "db.hmm.h3i" into db_hmm3i_ch
-    path "db.hmm.h3m" into db_hmm3m_ch
-    path "db.hmm.h3p" into db_hmm3p_ch
-    path "db.hmm.h3m.ssi" into db_hmm_ssi_ch
 
     script:
     """
-    $scriptDir/create_hmmdb_solution_space.py $assembly_domtblout $pfam_hmmfile db.hmm $params.seed
-    hmmpress db.hmm
-    hmmfetch --index db.hmm
+    #!/usr/bin/env python
+
+    from pathlib import Path
+    from hmmer import HMMER, read_domtbl
+    import hmmer_reader
+    import pandas as pd
+    from numpy.random import RandomState
+
+    random = RandomState($params.seed)
+    meta_filepath = Path("/Users/horta/db/pfam/Pfam-A.hmm.meta.pkl.gz")
+    dombtbl_filepath = Path("/Users/horta/ebi/chlamydia/output/assembly/domtblout.txt")
+
+    meta = pd.read_pickle(meta_filepath)
+    rows = read_domtbl(dombtbl_filepath)
+
+    true_profiles = [row.target.accession for row in rows]
+    all_false_profiles = set(meta["ACC"].tolist()) - set(true_profiles)
+    false_profiles = list(random.choice(list(all_false_profiles), size=100, replace=False))
+
+    hmmer = HMMER("$pfam_hmmfile")
+    with open("db.hmm", "w") as file:
+        file.write(hmmer.fetch(true_profiles + false_profiles))
+    """
+}
+
+process press_db_hmmfile {
+    clusterOptions "-g $groupRoot/press_db_hmmfile"
+    publishDir params.outputDir, mode:"copy", saveAs: { name -> "$name" }
+
+    input:
+    path hmmfile from db_hmmfile_ch
+
+    output:
+    path "${hmmfile}.h3f" into db_hmm3f_ch
+    path "${hmmfile}.h3i" into db_hmm3i_ch
+    path "${hmmfile}.h3m" into db_hmm3m_ch
+    path "${hmmfile}.h3p" into db_hmm3p_ch
+    path "${hmmfile}.h3m.ssi" into db_hmmssi_ch
+
+    script:
+    """
+    hmmpress $hmmfile
+    hmmfetch --index $hmmfile
     """
 }
 
@@ -401,3 +400,44 @@ process create_hmmdb_solution_space {
 /* iseq_output_ch */
 /*     .mix(iseq_oamino_ch, iseq_ocodon_ch) */
 /*     .set { iseq_results_ch } */
+
+/* process uniprotkb_accessions { */
+/*     clusterOptions "-g $groupRoot/uniprotkb_accessions" */
+/*     memory "8 GB" */
+/*     publishDir params.outputDir, mode:"copy", saveAs: { name -> "$name" } */
+
+/*     input: */
+/*     path assembly_gff from assembly_gff_ch */
+
+/*     output: */
+/*     path "uniprotkb_accessions.txt" into uniprotkb_accessions_ch */
+
+/*     script: */
+/*     """ */
+/*     #!/usr/bin/env python */
+/*     import re */
+
+/*     from gff_io import read_gff */
+
+/*     uniprotkb_accs = set() */
+/*     pattern = re.compile(".*UniProtKB:([^:,]+)") */
+
+/*     for gff in read_gff("${assembly_gff}"): */
+/*         atts = gff.attributes_asdict() */
+
+/*         inference = atts.get("inference", None) */
+/*         if inference is None: */
+/*             continue */
+
+/*         m = re.match(pattern, inference) */
+/*         if m is None: */
+/*             continue */
+
+/*         assert len(m.groups()) == 1 */
+/*         uniprotkb_accs.add(m.groups()[0]) */
+
+/*     with open("uniprotkb_accessions.txt", "w") as file: */
+/*         for acc in uniprotkb_accs: */
+/*             file.write(acc + "\\n") */
+/*     """ */
+/* } */
