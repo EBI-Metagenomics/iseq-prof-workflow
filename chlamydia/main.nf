@@ -84,8 +84,7 @@ process prokka_assembly {
     input:
     path assembly from assembly_ch
 
-    output:
-    path "assembly.err" into assembly_err_ch
+    output: path "assembly.err" into assembly_err_ch
     path "assembly.ffn" into assembly_ffn_ch
     path "assembly.fsa" into assembly_fsa_ch
     path "assembly.gff" into assembly_gff_ch
@@ -292,7 +291,7 @@ process iseq_scan_targets {
 }
 
 iseq_output_split_ch
-    .collectFile(name: "output.gff", skip:1)
+    .collectFile(name: "output.gff", keepHeader:true, skip:1)
     .set { iseq_output_ch }
 
 
