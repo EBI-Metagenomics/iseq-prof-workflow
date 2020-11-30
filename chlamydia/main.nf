@@ -78,13 +78,13 @@ process prokka_assembly {
     clusterOptions "-g $groupRoot/prokka_assembly"
     cpus "${ Math.min(2, params.maxCPUs as int) }"
     memory "8 GB"
-    publishDir params.outputDir, mode:"copy", saveAs: { name -> "prokka/$name" }
-    /* storeDir "$params.storageDir/prokka" */
+    publishDir params.outputDir, mode:"copy", saveAs: { name -> "prokka_assembly/$name" }
 
     input:
     path assembly from assembly_ch
 
-    output: path "assembly.err" into assembly_err_ch
+    output:
+    path "assembly.err" into assembly_err_ch
     path "assembly.ffn" into assembly_ffn_ch
     path "assembly.fsa" into assembly_fsa_ch
     path "assembly.gff" into assembly_gff_ch
@@ -107,7 +107,7 @@ process hmmscan_assembly {
     clusterOptions "-g $groupRoot/hmmscan_assembly -R 'rusage[scratch=5120]'"
     cpus "${ Math.min(4, params.maxCPUs as int) }"
     memory "8 GB"
-    publishDir params.outputDir, mode:"copy", saveAs: { name -> "assembly/$name" }
+    publishDir params.outputDir, mode:"copy", saveAs: { name -> "hmmscan_assembly/$name" }
     /* scratch true */
     /* stageInMode "copy" */
 
@@ -133,7 +133,7 @@ process hmmscan_assembly {
 process iseq_scan_assembly {
     clusterOptions "-g $groupRoot/iseq_scan_assembly -R 'rusage[scratch=5120]'"
     memory "8 GB"
-    publishDir params.outputDir, mode:"copy", saveAs: { name -> "assembly/$name" }
+    publishDir params.outputDir, mode:"copy", saveAs: { name -> "iseq_scan_assembly/$name" }
     /* scratch true */
     /* stageInMode "copy" */
 
@@ -232,7 +232,7 @@ process alignment {
     clusterOptions "-g $groupRoot/alignment"
     memory "6 GB"
     cpus "${ Math.min(12, params.maxCPUs as int) }"
-    publishDir params.outputDir, mode:"copy"
+    publishDir params.outputDir, mode:"copy", saveAs: { name -> "alignment/$name" }
 
     input:
     path assembly from assembly_ch
@@ -253,21 +253,23 @@ process alignment {
     """
 }
 
-alignment_fasta_ch
+alignment_fasta_ch.into{ targets_ch1; targets_ch2 }
+
+targets_ch1
     .splitFasta(by:params.chunkSize, file:true)
-    .set { targets_split_ch }
+    .set { targets_chunk_ch }
 
 process iseq_scan_targets {
     clusterOptions "-g $groupRoot/iseq_scan_targets -R 'rusage[scratch=${task.attempt * 5120}]'"
     /* errorStrategy "retry" */
     /* maxRetries 4 */
     memory { 6.GB * task.attempt }
-    publishDir params.outputDir, mode:"copy", saveAs: { name -> "chunks/$name" }
+    publishDir params.outputDir, mode:"copy", saveAs: { name -> "iseq_scan_targets/chunks/$name" }
     /* scratch true */
     /* stageInMode "copy" */
 
     input:
-    path targets from targets_split_ch
+    path targets from targets_chunk_ch
     path hmmfile from db_hmmfile_ch.collect()
     path "${hmmfile}.h3f" from db_hmm3f_ch.collect()
     path "${hmmfile}.h3i" from db_hmm3i_ch.collect()
@@ -290,6 +292,64 @@ process iseq_scan_targets {
     """
 }
 
+process prokka_targets {
+    clusterOptions "-g $groupRoot/prokka_targets"
+    memory { 4.GB }
+    publishDir params.outputDir, mode:"copy", saveAs: { name -> "prokka_targets/$name" }
+
+    input:
+    path targets from targets_ch2
+
+    output:
+    path "targets.err" into targets_err_ch
+    path "targets.ffn" into targets_ffn_ch
+    path "targets.fsa" into targets_fsa_ch
+    path "targets.gff" into targets_gff_ch
+    path "targets.sqn" into targets_sqn_ch
+    path "targets.tsv" into targets_tsv_ch
+    path "targets.faa" into targets_faa_ch
+    path "targets.fna" into targets_fna_ch
+    path "targets.gbk" into targets_gbk_ch
+    path "targets.log" into targets_log_ch
+    path "targets.tbl" into targets_tbl_ch
+    path "targets.txt" into targets_txt_ch
+
+    script:
+    """
+    prokka --outdir . --force --prefix targets --cpus ${task.cpus} $targets
+    """
+}
+
+targets_faa_ch.into{ amino_targets_ch }
+
+process hmmscan_targets {
+    clusterOptions "-g $groupRoot/hmmscan_targets -R 'rusage[scratch=${task.attempt * 5120}]'"
+    /* errorStrategy "retry" */
+    /* maxRetries 4 */
+    memory { 6.GB * task.attempt }
+    publishDir params.outputDir, mode:"copy", saveAs: { name -> "hmmscan_targets/$name" }
+    /* scratch true */
+    /* stageInMode "copy" */
+
+    input:
+    path targets from amino_targets_ch
+    path hmmfile from db_hmmfile_ch.collect()
+    path "${hmmfile}.h3f" from db_hmm3f_ch.collect()
+    path "${hmmfile}.h3i" from db_hmm3i_ch.collect()
+    path "${hmmfile}.h3m" from db_hmm3m_ch.collect()
+    path "${hmmfile}.h3p" from db_hmm3p_ch.collect()
+    path "${hmmfile}.h3m.ssi" from db_hmmssi_ch.collect()
+
+    output:
+    path("domtblout.txt") into hmmscan_domtblout_ch
+
+    script:
+    """
+    hmmscan -o /dev/null --noali --cut_ga --domtblout domtblout.txt --cpu ${task.cpus} \
+        $hmmfile $targets
+    """
+}
+
 iseq_output_split_ch
     .collectFile(name: "output.gff", keepHeader:true, skip:1)
     .set { iseq_output_ch }
@@ -307,9 +367,9 @@ iseq_output_ch
     .mix(iseq_oamino_ch, iseq_ocodon_ch)
     .set { iseq_results_ch }
 
-process save_output {
-    clusterOptions "-g $groupRoot/save_output"
-    publishDir params.outputDir, mode:"copy", overwrite: true
+process merge_iseq_chunks {
+    clusterOptions "-g $groupRoot/merge_iseq_chunks"
+    publishDir params.outputDir, mode:"copy", overwrite: true, saveAs: { name -> "iseq_scan_targets/$name" }
 
     input:
     path result from iseq_results_ch
