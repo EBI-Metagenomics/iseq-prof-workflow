@@ -121,11 +121,11 @@ process hmmscan_assembly {
     path assembly_faa from assembly_faa_ch
 
     output:
-    path "domtblout.txt" into assembly_domtblout_ch
+    path "domtbl.txt" into assembly_domtblout_ch
 
     script:
     """
-    hmmscan -o /dev/null --noali --cut_ga --domtblout domtblout.txt \
+    hmmscan -o /dev/null --noali --cut_ga --domtblout domtbl.txt \
         --cpu ${task.cpus} $pfam_hmmfile $assembly_faa
     """
 }
@@ -199,7 +199,9 @@ process create_hmmdb_solution_space {
 
     true_profiles = [row.target.accession for row in rows]
     all_false_profiles = set(meta["ACC"].tolist()) - set(true_profiles)
-    false_profiles = list(random.choice(list(all_false_profiles), size=100, replace=False))
+    false_profiles = list(random.choice(list(all_false_profiles),
+                                        size=$params.numFalseProfiles,
+                                        replace=False))
 
     hmmer = HMMER("$pfam_hmmfile")
     with open("db.hmm", "w") as file:
@@ -247,7 +249,7 @@ process alignment {
     """
     minimap2 -ax map-ont -t ${task.cpus} $assembly $targets | grep --invert-match "^@PG" > unsorted.sam
     samtools sort -O BAM --no-PG -n --threads ${task.cpus} unsorted.sam > all.bam
-    samtools view -O SAM --no-PG -h -q 60 all.bam > alignment.sam
+    samtools view -O SAM --no-PG -h -q 60 -F 2064 all.bam > alignment.sam
     samtools view -O BAM --no-PG alignment.sam > alignment.bam
     samtools fasta alignment.bam > alignment.fasta
     """
@@ -320,7 +322,7 @@ process prokka_targets {
     """
 }
 
-targets_faa_ch.into{ amino_targets_ch }
+targets_faa_ch.set{ amino_targets_ch }
 
 process hmmscan_targets {
     clusterOptions "-g $groupRoot/hmmscan_targets -R 'rusage[scratch=${task.attempt * 5120}]'"
@@ -341,11 +343,11 @@ process hmmscan_targets {
     path "${hmmfile}.h3m.ssi" from db_hmmssi_ch.collect()
 
     output:
-    path("domtblout.txt") into hmmscan_domtblout_ch
+    path("domtbl.txt") into hmmscan_domtblout_ch
 
     script:
     """
-    hmmscan -o /dev/null --noali --cut_ga --domtblout domtblout.txt --cpu ${task.cpus} \
+    hmmscan -o /dev/null --noali --cut_ga --domtblout domtbl.txt --cpu ${task.cpus} \
         $hmmfile $targets
     """
 }
