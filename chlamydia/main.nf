@@ -3,7 +3,9 @@
 scriptDir = file("$projectDir/script")
 groupRoot = "/horta/$workflow.runName"
 
-assembly_ch = Channel.fromPath(params.assemblyFile).collect()
+assembly_pre_ch = Channel.fromPath(params.assemblyFile).collect()
+hmmfile_ch = Channel.fromPath(params.hmmfile).collect()
+targets_ch = Channel.fromPath(params.targetsFile).collect()
 
 process save_params {
     clusterOptions "-g $groupRoot/save_params"
@@ -19,16 +21,45 @@ process save_params {
     """
 }
 
+process rename_assemblies {
+    clusterOptions "-g $groupRoot/rename_assemblies"
+    publishDir params.outputDir, mode:"copy", saveAs: { name -> "assembly/$name" }
+
+    input:
+    path assembly_pre from assembly_pre_ch
+
+    output:
+    path "assembly.fasta" into assembly_ch
+
+    script:
+    """
+    #!/usr/bin/env python
+
+    from pathlib import Path
+
+    from fasta_reader import read_fasta, write_fasta
+
+    id_map = {"1": "consensus1", "2": "consensus2"}
+    with write_fasta("assembly.fasta", 70) as writer:
+        for item in read_fasta("$assembly_pre"):
+            defline = f"{id_map[item.id]} {item.desc}"
+            writer.write_item(defline, item.sequence)
+    """
+}
+
 process download_pfam_hmm {
     clusterOptions "-g $groupRoot/download_pfam_hmm"
     storeDir "$params.storageDir/pfam"
+
+    input:
+    path hmmfile from hmmfile_ch
 
     output:
     path "Pfam-A.hmm" into pfam_hmmfile_ch
 
     script:
     """
-    curl -s $params.hmmfile | gunzip -c > Pfam-A.hmm
+    curl -s $hmmfile | gunzip -c > Pfam-A.hmm
     """
 }
 
@@ -81,7 +112,7 @@ process prokka_assembly {
     publishDir params.outputDir, mode:"copy", saveAs: { name -> "prokka_assembly/$name" }
 
     input:
-    path assembly from assembly_ch
+    path assembly from assembly_ch.collect()
 
     output:
     path "assembly.err" into assembly_err_ch
@@ -108,8 +139,8 @@ process hmmscan_assembly {
     cpus "${ Math.min(4, params.maxCPUs as int) }"
     memory "8 GB"
     publishDir params.outputDir, mode:"copy", saveAs: { name -> "hmmscan_assembly/$name" }
-    /* scratch true */
-    /* stageInMode "copy" */
+    scratch true
+    stageInMode "copy"
 
     input:
     path pfam_hmmfile from pfam_hmmfile_ch
@@ -134,11 +165,11 @@ process iseq_scan_assembly {
     clusterOptions "-g $groupRoot/iseq_scan_assembly -R 'rusage[scratch=5120]'"
     memory "8 GB"
     publishDir params.outputDir, mode:"copy", saveAs: { name -> "iseq_scan_assembly/$name" }
-    /* scratch true */
-    /* stageInMode "copy" */
+    scratch true
+    stageInMode "copy"
 
     when:
-    params.scanAssembly == "yes"
+    params.iseqScanAssembly == "yes"
 
     input:
     path pfam_hmmfile from pfam_hmmfile_ch
@@ -147,7 +178,7 @@ process iseq_scan_assembly {
     path pfam_hmm3m from pfam_hmm3m_ch
     path pfam_hmm3p from pfam_hmm3p_ch
     path pfam_hmmssi from pfam_hmmssi_ch
-    path assembly from assembly_ch
+    path assembly from assembly_ch.collect()
 
     output:
     path "output.gff" into assembly_iseq_output_ch
@@ -185,9 +216,9 @@ process create_hmmdb_solution_space {
     #!/usr/bin/env python
 
     from pathlib import Path
-    from hmmer import HMMER, read_domtbl
-    import hmmer_reader
+
     import pandas as pd
+    from hmmer import HMMER, read_domtbl
     from numpy.random import RandomState
 
     random = RandomState($params.seed)
@@ -197,15 +228,16 @@ process create_hmmdb_solution_space {
     meta = pd.read_pickle(meta_filepath)
     rows = read_domtbl(dombtbl_filepath)
 
-    true_profiles = [row.target.accession for row in rows]
-    all_false_profiles = set(meta["ACC"].tolist()) - set(true_profiles)
-    false_profiles = list(random.choice(list(all_false_profiles),
-                                        size=$params.numFalseProfiles,
-                                        replace=False))
+    true_profiles = set([row.target.accession for row in rows])
+    all_false_profiles = set(meta["ACC"].tolist()) - true_profiles
+    nfalses = min(len(all_false_profiles), $params.numFalseProfiles)
+    false_profiles = list(
+        random.choice(list(all_false_profiles), size=nfalses, replace=False)
+    )
 
     hmmer = HMMER("$pfam_hmmfile")
     with open("db.hmm", "w") as file:
-        file.write(hmmer.fetch(true_profiles + false_profiles))
+        file.write(hmmer.fetch(list(true_profiles) + false_profiles))
     """
 }
 
@@ -237,7 +269,8 @@ process alignment {
     publishDir params.outputDir, mode:"copy", saveAs: { name -> "alignment/$name" }
 
     input:
-    path assembly from assembly_ch
+    path assembly from assembly_ch.collect()
+    path targets from targets_ch
 
     output:
     path "alignment.sam" into alignment_sam_ch
@@ -245,8 +278,8 @@ process alignment {
     path "alignment.fasta" into alignment_fasta_ch
 
     script:
-    targets = params.targetsFile
     """
+    test -e $assembly && test -e $targets
     minimap2 -ax map-ont -t ${task.cpus} $assembly $targets | grep --invert-match "^@PG" > unsorted.sam
     samtools sort -O BAM --no-PG -n --threads ${task.cpus} unsorted.sam > all.bam
     samtools view -O SAM --no-PG -h -q 60 -F 2064 all.bam > alignment.sam
@@ -263,12 +296,12 @@ targets_ch1
 
 process iseq_scan_targets {
     clusterOptions "-g $groupRoot/iseq_scan_targets -R 'rusage[scratch=${task.attempt * 5120}]'"
-    /* errorStrategy "retry" */
-    /* maxRetries 4 */
-    memory { 6.GB * task.attempt }
+    errorStrategy "retry"
+    maxRetries 4
+    memory { 8.GB * task.attempt }
     publishDir params.outputDir, mode:"copy", saveAs: { name -> "iseq_scan_targets/chunks/$name" }
-    /* scratch true */
-    /* stageInMode "copy" */
+    scratch true
+    stageInMode "copy"
 
     input:
     path targets from targets_chunk_ch
@@ -296,8 +329,12 @@ process iseq_scan_targets {
 
 process prokka_targets {
     clusterOptions "-g $groupRoot/prokka_targets"
-    memory { 4.GB }
+    errorStrategy "retry"
+    maxRetries 4
+    memory { 4.GB * task.attempt }
     publishDir params.outputDir, mode:"copy", saveAs: { name -> "prokka_targets/$name" }
+    scratch true
+    stageInMode "copy"
 
     input:
     path targets from targets_ch2
@@ -326,12 +363,12 @@ targets_faa_ch.set{ amino_targets_ch }
 
 process hmmscan_targets {
     clusterOptions "-g $groupRoot/hmmscan_targets -R 'rusage[scratch=${task.attempt * 5120}]'"
-    /* errorStrategy "retry" */
-    /* maxRetries 4 */
+    errorStrategy "retry"
+    maxRetries 4
     memory { 6.GB * task.attempt }
     publishDir params.outputDir, mode:"copy", saveAs: { name -> "hmmscan_targets/$name" }
-    /* scratch true */
-    /* stageInMode "copy" */
+    scratch true
+    stageInMode "copy"
 
     input:
     path targets from amino_targets_ch
