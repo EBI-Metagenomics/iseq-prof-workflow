@@ -1,10 +1,23 @@
 #!/usr/bin/env nextflow
 
-scriptDir = file("$projectDir/script")
-groupRoot = "/horta/$workflow.runName"
+params.groupRoot = "/$workflow.userName/$workflow.runName"
+params.outputDir = "$launchDir/output"
+params.storageDir = "/hps/research/finn/horta/db/chlamydia"
+params.hmmFile = "ftp://ftp.ebi.ac.uk/pub/databases/Pfam/releases/Pfam33.1/Pfam-A.hmm.gz"
+params.chunkSize = 100
+params.maxTrueProfiles = 100000
+params.maxFalseProfiles = 100000
+params.queueSize = 4000
+params.seed = 98748
+params.iseqEpsilon = 0.01
+frozenDir = "/hps/research/finn/horta/chlamydia/2019-11-07_trans-hmmer/data/chlamydia"
+params.assemblyFile = "$frozenDir/14-2711_unicycler.fasta"
+params.targetsFile = "$frozenDir/14-2711_R47.fastq"
+params.maxCPUs = 128
+params.iseqScanAssembly = "no"
 
 assembly_pre_ch = Channel.fromPath(params.assemblyFile).collect()
-hmmfile_ch = Channel.fromPath(params.hmmfile).collect()
+hmmfile_ch = Channel.fromPath(params.hmmFile).collect()
 targets_ch = Channel.fromPath(params.targetsFile).collect()
 
 process save_params {
@@ -12,11 +25,13 @@ process save_params {
     publishDir params.outputDir, mode:"copy"
 
     output:
+    path "commandLine.txt"
     path "params.txt"
 
     script:
     params_cmd = params.all()
     """
+    echo "$workflow.commandLine" > commandLine.txt
     echo "$params_cmd" > params.txt
     """
 }
@@ -135,7 +150,7 @@ process prokka_assembly {
 }
 
 process hmmscan_assembly {
-    clusterOptions "-g $groupRoot/hmmscan_assembly -R 'rusage[scratch=5120]'"
+    clusterOptions "-g $groupRoot/hmmscan_assembly -R 'rusage[scratch=${task.attempt * 5120}]'"
     cpus "${ Math.min(4, params.maxCPUs as int) }"
     memory "8 GB"
     publishDir params.outputDir, mode:"copy", saveAs: { name -> "hmmscan_assembly/$name" }
@@ -229,15 +244,17 @@ process create_hmmdb_solution_space {
     rows = read_domtbl(dombtbl_filepath)
 
     true_profiles = set([row.target.accession for row in rows])
-    all_false_profiles = set(meta["ACC"].tolist()) - true_profiles
-    nfalses = min(len(all_false_profiles), $params.numFalseProfiles)
-    false_profiles = list(
-        random.choice(list(all_false_profiles), size=nfalses, replace=False)
-    )
+    ntrues = min(len(true_profiles), $params.maxTrueProfiles)
+    true_profiles = list(random.choice(list(true_profiles), size=ntrues, replace=False))
+
+    all_falses = set(meta["ACC"].tolist()) - true_profiles
+    nfalses = min(len(all_falses), $params.maxFalseProfiles)
+    false_profiles = list(random.choice(list(all_falses), size=nfalses, replace=False))
 
     hmmer = HMMER("$pfam_hmmfile")
     with open("db.hmm", "w") as file:
-        file.write(hmmer.fetch(list(true_profiles) + false_profiles))
+        profiles = list(sorted(true_profiles)) + list(sorted(false_profiles))
+        file.write(hmmer.fetch(profiles))
     """
 }
 
@@ -265,7 +282,7 @@ process press_db_hmmfile {
 process alignment {
     clusterOptions "-g $groupRoot/alignment"
     memory "6 GB"
-    cpus "${ Math.min(12, params.maxCPUs as int) }"
+    cpus "${ Math.min(4, params.maxCPUs as int) }"
     publishDir params.outputDir, mode:"copy", saveAs: { name -> "alignment/$name" }
 
     input:
@@ -328,7 +345,7 @@ process iseq_scan_targets {
 }
 
 process prokka_targets {
-    clusterOptions "-g $groupRoot/prokka_targets"
+    clusterOptions "-g $groupRoot/prokka_targets -R 'rusage[scratch=${task.attempt * 5120}]'"
     errorStrategy "retry"
     maxRetries 4
     memory { 4.GB * task.attempt }
